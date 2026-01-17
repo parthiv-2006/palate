@@ -12,7 +12,11 @@ export const lobbyApi = {
   
   startMatching: (lobbyId) => apiRequest(`/lobby/${lobbyId}/start-matching`, { method: 'POST' }),
   
-  getRestaurants: (lobbyId) => apiRequest(`/lobby/${lobbyId}/restaurants`),
+  // Optional opts: { location: 'lat,lon' or 'City, State' }
+  getRestaurants: (lobbyId, opts = {}) => {
+    const qs = opts.location ? `?location=${encodeURIComponent(opts.location)}` : '';
+    return apiRequest(`/lobby/${lobbyId}/restaurants${qs}`);
+  },
   
   swipe: (lobbyId, restaurantId, direction) => apiRequest(`/lobby/${lobbyId}/swipe`, {
     method: 'POST',

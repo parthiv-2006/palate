@@ -32,6 +32,7 @@ export default function MatchingPage() {
   const lobbyId = params.lobbyId;
   const { isAuthenticated, hasHydrated } = useAuth();
   const [restaurants, setRestaurants] = useState([]);
+  const [userLocation, setUserLocation] = useState(null);
   const [swipeProgress, setSwipeProgress] = useState(null);
   const [userDone, setUserDone] = useState(false);
 
@@ -50,8 +51,8 @@ export default function MatchingPage() {
   }, [lobbyData?.status, lobbyId, router]);
 
   const { data: restaurantsData, isLoading: isLoadingRestaurants } = useQuery({
-    queryKey: ['restaurants', lobbyId],
-    queryFn: async () => lobbyApi.getRestaurants(lobbyId),
+    queryKey: ['restaurants', lobbyId, userLocation],
+    queryFn: async () => lobbyApi.getRestaurants(lobbyId, { location: userLocation }),
     enabled: !!lobbyId && hasHydrated && isAuthenticated && !userDone,
     refetchInterval: false,
   });
@@ -95,6 +96,22 @@ export default function MatchingPage() {
   useEffect(() => {
     if (hasHydrated && !isAuthenticated) router.push('/');
   }, [isAuthenticated, hasHydrated, router]);
+
+  // Try to get browser geolocation to improve Yelp search relevance
+  useEffect(() => {
+    if (!('geolocation' in navigator)) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        setUserLocation(`${latitude},${longitude}`);
+      },
+      (err) => {
+        // ignore geolocation errors; server will fall back to DB
+        console.warn('Geolocation not available or permission denied', err.message);
+      },
+      { enableHighAccuracy: false, timeout: 5000 }
+    );
+  }, []);
 
   const handleSwipe = async (restaurantId, direction) => {
     try {

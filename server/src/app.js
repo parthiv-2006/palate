@@ -6,6 +6,7 @@ const errorHandler = require('./middleware/errorHandler');
 const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');
 const lobbyRoutes = require('./routes/lobby.routes');
+const recommendationRoutes = require('./routes/recommendation.routes');
 
 const app = express();
 
@@ -26,6 +27,7 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/lobby', lobbyRoutes);
+app.use('/api/recommendations', recommendationRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);

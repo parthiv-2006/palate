@@ -1,6 +1,8 @@
 const Lobby = require('../models/Lobby');
 const User = require('../models/User');
 const Restaurant = require('../models/Restaurant');
+const gemini = require('../utils/gemini');
+const yelp = require('../utils/yelp');
 const generateLobbyCode = require('../utils/generateCode');
 const AppError = require('../utils/errors');
 
@@ -365,18 +367,97 @@ exports.getRestaurants = async (req, res, next) => {
         .map(id => new mongoose.Types.ObjectId(id));
       restaurants = await Restaurant.find({ _id: { $in: storedIds } });
     } else {
-      // First fetch or too few restaurants - get restaurants and store them
+      // First fetch or too few restaurants - try DB first
       restaurants = await Restaurant.find(query).limit(20);
 
-      // If too few restaurants match, get all restaurants (relaxed filtering)
-      if (restaurants.length < 5) {
-        console.log('Preference filter too strict, fetching all restaurants');
-        restaurants = await Restaurant.find({}).limit(20);
+      // If too few restaurants match, try enriching with Yelp + Gemini when possible
+      if (restaurants.length < 5 && process.env.YELP_API_KEY && req.query.location) {
+        try {
+          const rawLocation = req.query.location;
+          const coords = typeof rawLocation === 'string' && rawLocation.includes(',')
+            ? rawLocation.split(',').map(s => s.trim())
+            : null;
+          const searchOpts = { limit: 30 };
+          if (coords && coords.length === 2 && !isNaN(Number(coords[0])) && !isNaN(Number(coords[1]))) {
+            searchOpts.latitude = Number(coords[0]);
+            searchOpts.longitude = Number(coords[1]);
+          } else {
+            searchOpts.location = rawLocation;
+          }
+          const yelpCandidates = await yelp.searchBusinesses(searchOpts);
+
+          // Use Gemini to rank/enrich candidates based on group preferences
+          const ranked = await gemini.generateRecommendations(preferences.length ? preferences : {}, yelpCandidates);
+
+          // ranked is expected to be an array of { name, reason, score, source }
+          // Map ranked names back to yelpCandidates by name (best-effort), then upsert into Restaurant
+          const candidateMap = new Map(yelpCandidates.map(c => [c.name, c]));
+
+          // Build list of candidate+meta pairs so we can save Gemini reasons
+          const toUpsert = [];
+          if (Array.isArray(ranked) && ranked.length > 0) {
+            for (const r of ranked) {
+              const cand = candidateMap.get(r.name) || null;
+              if (cand) toUpsert.push({ cand, meta: r });
+            }
+          }
+          if (toUpsert.length === 0) {
+            // fallback to first N Yelp candidates
+            for (const cand of yelpCandidates.slice(0, 20)) {
+              toUpsert.push({ cand, meta: null });
+            }
+          }
+
+          const upserted = [];
+          for (const item of toUpsert) {
+            const c = item.cand;
+            const meta = item.meta;
+            if (!c || !c.name) continue;
+            const existing = await Restaurant.findOne({ external_id: c.id });
+            if (existing) {
+              // attach meta.reason to description if present
+              if (meta && meta.reason) {
+                existing.description = (existing.description ? existing.description + ' — ' : '') + meta.reason;
+                await existing.save();
+              }
+              upserted.push(existing);
+            } else {
+              const created = await Restaurant.create({
+                name: c.name,
+                description: ((c.url || '') + (meta && meta.reason ? ` — ${meta.reason}` : '')),
+                image: c.image_url || '',
+                price_range: c.price || undefined,
+                location: c.location || {},
+                rating: c.rating || undefined,
+                dietary_options: [],
+                spice_level: 'medium',
+                tags: (c.categories || []).map(cat => cat.title),
+                external_id: c.id,
+                source: 'yelp',
+              });
+              upserted.push(created);
+            }
+          }
+
+          if (upserted.length > 0) {
+            restaurants = upserted;
+            lobby.matchingRestaurants = restaurants.map(r => r._id.toString());
+            await lobby.save();
+          }
+        } catch (err) {
+          console.warn('Yelp/Gemini enrichment failed:', err.message || err);
+        }
       }
 
-      // Store the restaurant IDs for this matching session
-      lobby.matchingRestaurants = restaurants.map(r => r._id.toString());
-      await lobby.save();
+      // If still too few restaurants, get all restaurants (relaxed filtering)
+      if (!restaurants || restaurants.length < 5) {
+        console.log('Preference filter too strict or enrichment not available, fetching all restaurants');
+        restaurants = await Restaurant.find({}).limit(20);
+
+        // Store the restaurant IDs for this matching session
+        lobby.matchingRestaurants = restaurants.map(r => r._id.toString());
+        await lobby.save();
+      }
     }
 
     // Filter out already swiped restaurants for this user
