@@ -145,12 +145,15 @@ export default function DashboardPage() {
               </h1>
             </div>
             <div className="flex items-center gap-6">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#7209b7] to-[#f72585] flex items-center justify-center text-sm font-bold">
+              <button
+                onClick={() => router.push('/profile')}
+                className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+              >
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#7209b7] to-[#f72585] flex items-center justify-center text-sm font-bold cursor-pointer">
                   {(profile?.username || user?.username || 'U').charAt(0).toUpperCase()}
                 </div>
                 <span className="text-white/80 font-medium hidden sm:block">{profile?.username || user?.username}</span>
-              </div>
+              </button>
               <button
                 onClick={() => { logout(); router.push('/'); }}
                 className="text-white/50 hover:text-white transition-colors text-sm"
