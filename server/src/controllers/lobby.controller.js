@@ -229,8 +229,105 @@ exports.startMatching = async (req, res, next) => {
     }
 
     // Update lobby status
+    // Clear any previous matching session data so we generate fresh restaurants
+    lobby.matchingRestaurants = [];
+    lobby.swipes = [];
+    lobby.consensusRestaurants = [];
+    lobby.votes = [];
+    lobby.tiedRestaurants = [];
+    lobby.winningRestaurant = null;
+
+    console.log(`Starting matching for lobby ${lobbyId} - cleared previous matching data`);
+
+    // Set status to matching and save preliminary state
     lobby.status = 'matching';
     await lobby.save();
+
+    // Attempt to generate fresh restaurants immediately if location + Yelp key provided
+    try {
+      const rawLocation = req.body?.location;
+      if (process.env.YELP_API_KEY && rawLocation) {
+        console.log(`Generating recommendations for lobby ${lobbyId} using Yelp/Gemini at location=${rawLocation}`);
+
+        const preferences = lobby.participants.map(p => {
+          const userPrefs = (p.user_id && p.user_id.preferences) ? p.user_id.preferences : {};
+          return Object.assign({}, userPrefs, (p.vibeCheck || {}));
+        }).filter(Boolean);
+
+        const coords = typeof rawLocation === 'string' && rawLocation.includes(',')
+          ? rawLocation.split(',').map(s => s.trim())
+          : null;
+        const searchOpts = { limit: 30 };
+        if (coords && coords.length === 2 && !isNaN(Number(coords[0])) && !isNaN(Number(coords[1]))) {
+          searchOpts.latitude = Number(coords[0]);
+          searchOpts.longitude = Number(coords[1]);
+        } else {
+          searchOpts.location = rawLocation;
+        }
+
+        const yelpCandidates = await yelp.searchBusinesses(searchOpts);
+        const ranked = await gemini.generateRecommendations(preferences.length ? preferences : {}, yelpCandidates);
+
+        const candidateMap = new Map(yelpCandidates.map(c => [c.name, c]));
+        const toUpsert = [];
+        if (Array.isArray(ranked) && ranked.length > 0) {
+          for (const r of ranked) {
+            const cand = candidateMap.get(r.name) || null;
+            if (cand) toUpsert.push({ cand, meta: r });
+          }
+        }
+        if (toUpsert.length === 0) {
+          for (const cand of yelpCandidates.slice(0, 20)) {
+            toUpsert.push({ cand, meta: null });
+          }
+        }
+
+        const upserted = [];
+        for (const item of toUpsert) {
+          const c = item.cand;
+          const meta = item.meta;
+          if (!c || !c.name) continue;
+          const existing = await Restaurant.findOne({ external_id: c.id });
+          if (existing) {
+            if (meta && meta.reason) {
+              existing.description = (existing.description ? existing.description + ' — ' : '') + meta.reason;
+              await existing.save();
+            }
+            upserted.push(existing);
+            } else {
+              try {
+                const cuisineFromCat = (c.categories && c.categories[0] && c.categories[0].title) || 'Various';
+                const created = await Restaurant.create({
+                  name: c.name,
+                  cuisine: cuisineFromCat,
+                  description: ((c.url || '') + (meta && meta.reason ? ` — ${meta.reason}` : '')),
+                  image: c.image_url || '',
+                  price_range: c.price || undefined,
+                  location: c.location || {},
+                  rating: c.rating || undefined,
+                  dietary_options: [],
+                  spice_level: 'medium',
+                  tags: (c.categories || []).map(cat => cat.title),
+                  external_id: c.id,
+                  source: 'yelp',
+                });
+                upserted.push(created);
+              } catch (e) {
+                console.warn('Failed to create Restaurant from Yelp candidate:', c.name, e.message || e);
+                continue;
+              }
+            }
+        }
+
+        if (upserted.length > 0) {
+          lobby.matchingRestaurants = upserted.map(r => r._id.toString());
+          await lobby.save();
+          console.log(`StartMatching: enriched and upserted ${upserted.length} restaurants for lobby ${lobbyId}`);
+        }
+      }
+    } catch (err) {
+      console.warn('StartMatching enrichment failed:', err.message || err);
+    }
 
     res.json({
       success: true,
@@ -270,8 +367,10 @@ exports.getRestaurants = async (req, res, next) => {
     }
 
     // Get all participants' preferences
-    const participants = lobby.participants.map(p => p.user_id).filter(Boolean);
-    const preferences = participants.map(p => p.preferences || {});
+    const preferences = lobby.participants.map(p => {
+      const userPrefs = (p.user_id && p.user_id.preferences) ? p.user_id.preferences : {};
+      return Object.assign({}, userPrefs, (p.vibeCheck || {}));
+    }).filter(Boolean);
 
     // Build filter based on group preferences
     const filters = {};
@@ -370,9 +469,10 @@ exports.getRestaurants = async (req, res, next) => {
       // First fetch or too few restaurants - try DB first
       restaurants = await Restaurant.find(query).limit(20);
 
-      // If too few restaurants match, try enriching with Yelp + Gemini when possible
-      if (restaurants.length < 5 && process.env.YELP_API_KEY && req.query.location) {
+      // If Yelp key and location provided, prefer enriching with Yelp + Gemini
+      if (process.env.YELP_API_KEY && req.query.location) {
         try {
+          console.log('Attempting Yelp + Gemini enrichment for matching restaurants');
           const rawLocation = req.query.location;
           const coords = typeof rawLocation === 'string' && rawLocation.includes(',')
             ? rawLocation.split(',').map(s => s.trim())
@@ -422,20 +522,27 @@ exports.getRestaurants = async (req, res, next) => {
               }
               upserted.push(existing);
             } else {
-              const created = await Restaurant.create({
-                name: c.name,
-                description: ((c.url || '') + (meta && meta.reason ? ` — ${meta.reason}` : '')),
-                image: c.image_url || '',
-                price_range: c.price || undefined,
-                location: c.location || {},
-                rating: c.rating || undefined,
-                dietary_options: [],
-                spice_level: 'medium',
-                tags: (c.categories || []).map(cat => cat.title),
-                external_id: c.id,
-                source: 'yelp',
-              });
-              upserted.push(created);
+              try {
+                const cuisineFromCat = (c.categories && c.categories[0] && c.categories[0].title) || 'Various';
+                const created = await Restaurant.create({
+                  name: c.name,
+                  cuisine: cuisineFromCat,
+                  description: ((c.url || '') + (meta && meta.reason ? ` — ${meta.reason}` : '')),
+                  image: c.image_url || '',
+                  price_range: c.price || undefined,
+                  location: c.location || {},
+                  rating: c.rating || undefined,
+                  dietary_options: [],
+                  spice_level: 'medium',
+                  tags: (c.categories || []).map(cat => cat.title),
+                  external_id: c.id,
+                  source: 'yelp',
+                });
+                upserted.push(created);
+              } catch (e) {
+                console.warn('Failed to create Restaurant from Yelp candidate:', c.name, e.message || e);
+                continue;
+              }
             }
           }
 
@@ -443,6 +550,7 @@ exports.getRestaurants = async (req, res, next) => {
             restaurants = upserted;
             lobby.matchingRestaurants = restaurants.map(r => r._id.toString());
             await lobby.save();
+            console.log(`Enriched and upserted ${upserted.length} restaurants for lobby ${lobbyId}`);
           }
         } catch (err) {
           console.warn('Yelp/Gemini enrichment failed:', err.message || err);
@@ -472,7 +580,7 @@ exports.getRestaurants = async (req, res, next) => {
         name: r.name,
         cuisine: r.cuisine,
         description: r.description,
-        image: r.image || '/placeholder-restaurant.jpg',
+        image: r.image || null,
         price_range: r.price_range,
         location: r.location,
         rating: r.rating,
@@ -692,8 +800,8 @@ exports.getVotingData = async (req, res, next) => {
         name: r.name,
         cuisine: r.cuisine,
         description: r.description,
-        image: r.image || '/placeholder-restaurant.jpg',
-        imageUrl: r.image || '/placeholder-restaurant.jpg',
+        image: r.image || null,
+        imageUrl: r.image || null,
         price_range: r.price_range,
         location: r.location,
         rating: r.rating,
@@ -898,8 +1006,8 @@ exports.getResults = async (req, res, next) => {
         name: winningRestaurant.name,
         cuisine: winningRestaurant.cuisine,
         description: winningRestaurant.description,
-        image: winningRestaurant.image || '/placeholder-restaurant.jpg',
-        imageUrl: winningRestaurant.image || '/placeholder-restaurant.jpg',
+        image: winningRestaurant.image || null,
+        imageUrl: winningRestaurant.image || null,
         price_range: winningRestaurant.price_range,
         location: winningRestaurant.location,
         rating: winningRestaurant.rating,

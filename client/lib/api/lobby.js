@@ -10,7 +10,10 @@ export const lobbyApi = {
   
   get: (lobbyId) => apiRequest(`/lobby/${lobbyId}`),
   
-  startMatching: (lobbyId) => apiRequest(`/lobby/${lobbyId}/start-matching`, { method: 'POST' }),
+  startMatching: (lobbyId, opts = {}) => apiRequest(`/lobby/${lobbyId}/start-matching`, {
+    method: 'POST',
+    body: JSON.stringify(opts),
+  }),
   
   // Optional opts: { location: 'lat,lon' or 'City, State' }
   getRestaurants: (lobbyId, opts = {}) => {

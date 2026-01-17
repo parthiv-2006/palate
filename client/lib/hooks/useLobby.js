@@ -40,8 +40,8 @@ export function useLobby(lobbyId) {
   const restaurants = Array.isArray(lobby?.restaurants) ? lobby.restaurants : [];
 
   const startMatching = useMutation({
-    mutationFn: async () => {
-      return lobbyApi.startMatching(lobbyId);
+    mutationFn: async (opts) => {
+      return lobbyApi.startMatching(lobbyId, opts);
     },
     onSuccess: () => {
       refetch();

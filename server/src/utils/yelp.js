@@ -30,10 +30,20 @@ async function searchBusinesses({ location, term, categories, price, latitude, l
     review_count: b.review_count,
     price: b.price,
     categories: b.categories,
-    location: b.location,
+    // Normalize location to the app's expected shape
+    location: {
+      address: (b.location && (b.location.address1 || b.location.address)) || '',
+      city: b.location?.city || '',
+      state: b.location?.state || '',
+      zip: b.location?.zip_code || '',
+      latitude: b.coordinates?.latitude,
+      longitude: b.coordinates?.longitude,
+    },
     coordinates: b.coordinates,
     phone: b.display_phone,
     url: b.url,
+    image_url: b.image_url || null,
+    image: b.image_url || null,
     source: 'yelp',
   }));
 }

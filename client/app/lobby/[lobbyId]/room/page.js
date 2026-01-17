@@ -35,6 +35,7 @@ export default function LobbyRoomPage() {
   const { lobby, participants, isLoading, startMatching, isStartingMatching } = useLobby(lobbyId);
   const queryClient = useQueryClient();
   const [copied, setCopied] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
 
   const isHost = lobby?.host_id === (user?.userId || user?.id);
 
@@ -89,7 +90,20 @@ export default function LobbyRoomPage() {
       return;
     }
     try {
-      await startMatching();
+      // Attempt to get geolocation before starting matching to enable Yelp enrichment
+      let locToSend = null;
+      if ('geolocation' in navigator) {
+        try {
+          const pos = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 }));
+          const { latitude, longitude } = pos.coords;
+          const locStr = `${latitude},${longitude}`;
+          setUserLocation(locStr);
+          locToSend = locStr;
+        } catch (e) {
+          console.warn('Geolocation unavailable or denied', e.message || e);
+        }
+      }
+      await startMatching({ location: locToSend });
       toast.success('Matching started!');
       router.push(`/matching/${lobbyId}`);
     } catch (error) {
