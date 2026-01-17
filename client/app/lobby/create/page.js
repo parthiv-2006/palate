@@ -12,7 +12,7 @@ import { useLobby } from '@/lib/hooks/useLobby';
 import { useEffect } from 'react';
 
 export default function CreateLobbyPage() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, hasHydrated } = useAuth();
   const router = useRouter();
   const [isCreating, setIsCreating] = useState(false);
   const [lobbyId, setLobbyId] = useState(null);
@@ -20,10 +20,11 @@ export default function CreateLobbyPage() {
   const { lobby, participants, startMatching, isStartingMatching } = useLobby(lobbyId);
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    // Wait for auth state to hydrate before checking authentication
+    if (hasHydrated && !isAuthenticated) {
       router.push('/');
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, hasHydrated, router]);
 
   const handleCreateLobby = async () => {
     setIsCreating(true);
@@ -48,8 +49,16 @@ export default function CreateLobbyPage() {
     }
   };
 
-  if (!isAuthenticated) {
-    return null;
+  // Wait for hydration before rendering
+  if (!hasHydrated || (!isAuthenticated && hasHydrated)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
   // Show lobby creation button if no lobby exists

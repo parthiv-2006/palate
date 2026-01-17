@@ -7,14 +7,15 @@ import { useEffect } from 'react';
 import toast from 'react-hot-toast';
 
 export default function OnboardingPage() {
-  const { isAuthenticated, user, token } = useAuth();
+  const { isAuthenticated, hasHydrated, user, token } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    // Wait for auth state to hydrate before checking authentication
+    if (hasHydrated && !isAuthenticated) {
       router.push('/');
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, hasHydrated, router]);
 
   const handleSubmit = async (preferences) => {
     try {
@@ -47,8 +48,16 @@ export default function OnboardingPage() {
     }
   };
 
-  if (!isAuthenticated) {
-    return null; // Will redirect in useEffect
+  // Wait for hydration before rendering
+  if (!hasHydrated || (!isAuthenticated && hasHydrated)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
   return (

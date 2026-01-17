@@ -3,7 +3,7 @@ import { registerWithPassword, loginWithPassword } from '@/lib/auth/password';
 import { useRouter } from 'next/navigation';
 
 export function useAuth() {
-  const { user, token, isGuest, isLoading, error, setUser, setToken, setGuest, setLoading, setError, logout } = useAuthStore();
+  const { user, token, isGuest, isLoading, error, _hasHydrated, setUser, setToken, setGuest, setLoading, setError, logout } = useAuthStore();
   const router = useRouter();
 
   const register = async (username, password, confirmPassword) => {
@@ -52,5 +52,6 @@ export function useAuth() {
     enterGuestMode,
     logout,
     isAuthenticated: !!(user && token) || isGuest,
+    hasHydrated: _hasHydrated, // Expose hydration state
   };
 }

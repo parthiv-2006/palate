@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 
 export const useAuthStore = create(
   persist(
@@ -9,6 +9,7 @@ export const useAuthStore = create(
       isGuest: false,
       isLoading: false,
       error: null,
+      _hasHydrated: false, // Track if state has been rehydrated
 
       setUser: (user) => set({ user, isGuest: false }),
       setToken: (token) => set({ token }),
@@ -20,7 +21,14 @@ export const useAuthStore = create(
       setLoading: (isLoading) => set({ isLoading }),
       setError: (error) => set({ error }),
       logout: () => set({ user: null, token: null, isGuest: false, error: null }),
+      setHasHydrated: (state) => set({ _hasHydrated: state }),
     }),
-    { name: 'auth-storage' }
+    {
+      name: 'auth-storage',
+      storage: createJSONStorage(() => localStorage),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
+    }
   )
 );
