@@ -1,5 +1,6 @@
 const { generateRegistrationOptions, verifyRegistrationResponse } = require('@simplewebauthn/server');
 const { generateAuthenticationOptions, verifyAuthenticationResponse } = require('@simplewebauthn/server');
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const Passkey = require('../models/Passkey');
 const { generateToken } = require('../utils/jwt');
@@ -24,11 +25,13 @@ exports.getRegistrationOptions = async (req, res, next) => {
 
     // Check if user already exists
     const existingUser = await User.findOne({ username });
-    if (existingUser) {
+    if (existingUser && existingUser.passkey_id) {
+      // User exists and has a passkey - they should login instead
       return res.status(409).json({
-        error: { message: 'Username already exists' },
+        error: { message: 'Username already exists. Please login instead.' },
       });
     }
+    // If user exists but has no passkey, allow registration to complete the setup
 
     // Convert username to Buffer for userID (simplewebauthn requires Buffer/Uint8Array)
     // Use crypto.randomUUID or create a stable ID from username
@@ -115,38 +118,107 @@ exports.verifyRegistration = async (req, res, next) => {
     const { credentialID, credentialPublicKey, counter } = verification.registrationInfo;
 
     // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/c5fad2ad-7e13-4540-9d27-7cf70ab25c3b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth.controller.js:verifyRegistration',message:'Extracting registration info',data:{hasCredentialID:!!credentialID,hasPublicKey:!!credentialPublicKey,credentialIDType:typeof credentialID,isBuffer:Buffer.isBuffer(credentialID)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/c5fad2ad-7e13-4540-9d27-7cf70ab25c3b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth.controller.js:verifyRegistration',message:'Extracting registration info',data:{hasCredentialID:!!credentialID,hasPublicKey:!!credentialPublicKey,credentialIDType:typeof credentialID,isBuffer:Buffer.isBuffer(credentialID),isUint8Array:credentialID instanceof Uint8Array},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
     // #endregion
 
-    // Create user
-    const user = await User.create({
-      username,
-    });
-
-    // Save Passkey credential
-    // credentialID is already a Uint8Array from verification, convert to base64url
-    const credentialIdStr = Buffer.isBuffer(credentialID) 
-      ? credentialID.toString('base64url')
-      : Buffer.from(credentialID).toString('base64url');
+    // Convert credentialID to base64url string
+    // credentialID can be Buffer, Uint8Array, or Array-like
+    let credentialIdStr;
+    if (Buffer.isBuffer(credentialID)) {
+      credentialIdStr = credentialID.toString('base64url');
+    } else if (credentialID instanceof Uint8Array) {
+      credentialIdStr = Buffer.from(credentialID).toString('base64url');
+    } else {
+      // Handle Array-like objects
+      credentialIdStr = Buffer.from(credentialID).toString('base64url');
+    }
     
-    const publicKeyStr = Buffer.isBuffer(credentialPublicKey)
-      ? credentialPublicKey.toString('base64')
-      : Buffer.from(credentialPublicKey).toString('base64');
+    // Convert public key to base64 string
+    let publicKeyStr;
+    if (Buffer.isBuffer(credentialPublicKey)) {
+      publicKeyStr = credentialPublicKey.toString('base64');
+    } else if (credentialPublicKey instanceof Uint8Array) {
+      publicKeyStr = Buffer.from(credentialPublicKey).toString('base64');
+    } else {
+      // Handle Array-like objects
+      publicKeyStr = Buffer.from(credentialPublicKey).toString('base64');
+    }
     
     // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/c5fad2ad-7e13-4540-9d27-7cf70ab25c3b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth.controller.js:verifyRegistration',message:'Saving passkey',data:{userId:user._id.toString(),credentialIdLength:credentialIdStr.length,publicKeyLength:publicKeyStr.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/c5fad2ad-7e13-4540-9d27-7cf70ab25c3b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth.controller.js:verifyRegistration',message:'Saving passkey',data:{credentialIdLength:credentialIdStr.length,publicKeyLength:publicKeyStr.length,credentialIdStr:credentialIdStr.substring(0,20)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
     // #endregion
-    
-    const passkey = await Passkey.create({
-      user_id: user._id,
-      credential_id: credentialIdStr,
-      public_key: publicKeyStr,
-      counter: counter || 0,
-    });
 
-    // Update user with passkey reference
-    user.passkey_id = passkey._id;
-    await user.save();
+    // Check if user already exists (might have been created in a previous failed attempt)
+    let user = await User.findOne({ username });
+    
+    // If user exists and already has a passkey, reject registration
+    if (user && user.passkey_id) {
+      return res.status(409).json({
+        error: { message: 'User already has a passkey registered. Please login instead.' },
+      });
+    }
+    
+    // Use MongoDB session/transaction to ensure atomicity
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      // Create user if doesn't exist, otherwise use existing user
+      if (!user) {
+        const [createdUser] = await User.create([{
+          username,
+        }], { session });
+        user = createdUser;
+      } else {
+        // User exists but doesn't have passkey - ensure we're working with the latest version
+        // Reload user in session context
+        user = await User.findById(user._id).session(session);
+      }
+
+      // Save Passkey credential within transaction
+      const [createdPasskey] = await Passkey.create([{
+        user_id: user._id,
+        credential_id: credentialIdStr,
+        public_key: publicKeyStr,
+        counter: counter || 0,
+      }], { session });
+
+      // Update user with passkey reference within transaction
+      user.passkey_id = createdPasskey._id;
+      await user.save({ session });
+
+      // Commit transaction
+      await session.commitTransaction();
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/c5fad2ad-7e13-4540-9d27-7cf70ab25c3b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth.controller.js:verifyRegistration',message:'Passkey saved successfully',data:{userId:user._id.toString(),passkeyId:createdPasskey._id.toString()},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+
+      // Generate JWT token
+      const token = generateToken({
+        userId: user._id.toString(),
+        username: user.username,
+        isGuest: false,
+      });
+
+      res.json({
+        verified: true,
+        userId: user._id.toString(),
+        token,
+      });
+    } catch (transactionError) {
+      // Rollback transaction on error
+      await session.abortTransaction();
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/c5fad2ad-7e13-4540-9d27-7cf70ab25c3b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth.controller.js:verifyRegistration',message:'Transaction error',data:{error:transactionError.message,code:transactionError.code,stack:transactionError.stack},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      
+      throw transactionError;
+    } finally {
+      // Always end the session
+      session.endSession();
+    }
 
     // Generate JWT token
     const token = generateToken({
@@ -164,11 +236,28 @@ exports.verifyRegistration = async (req, res, next) => {
     // #region agent log
     fetch('http://127.0.0.1:7242/ingest/c5fad2ad-7e13-4540-9d27-7cf70ab25c3b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth.controller.js:verifyRegistration',message:'Verification error',data:{error:error.message,errorName:error.name,stack:error.stack,code:error.code},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
     // #endregion
+    
+    // Handle duplicate key errors
     if (error.code === 11000) {
+      // Check if it's a duplicate username or credential_id
+      if (error.keyPattern?.username) {
+        return res.status(409).json({
+          error: { message: 'Username already exists' },
+        });
+      }
+      if (error.keyPattern?.credential_id) {
+        return res.status(409).json({
+          error: { message: 'Passkey already registered. Please try logging in instead.' },
+        });
+      }
       return res.status(409).json({
-        error: { message: 'Username already exists' },
+        error: { message: 'Duplicate entry detected' },
       });
     }
+    
+    // Log the error for debugging
+    console.error('Passkey registration error:', error);
+    
     next(error);
   }
 };
