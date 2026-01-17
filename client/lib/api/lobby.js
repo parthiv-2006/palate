@@ -28,4 +28,13 @@ export const lobbyApi = {
   }),
   
   getResults: (lobbyId) => apiRequest(`/lobby/${lobbyId}/results`),
+
+  // Session management endpoints
+  resetLobby: (lobbyId) => apiRequest(`/lobby/${lobbyId}/reset`, {
+    method: 'POST',
+  }),
+  
+  leaveLobby: (lobbyId) => apiRequest(`/lobby/${lobbyId}/leave`, {
+    method: 'POST',
+  }),
 };

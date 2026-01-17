@@ -10,6 +10,8 @@ const {
   getVotingData,
   submitVote,
   getResults,
+  resetLobby,
+  leaveLobby,
 } = require('../controllers/lobby.controller');
 const authenticate = require('../middleware/auth.middleware');
 
@@ -25,5 +27,9 @@ router.post('/:lobbyId/swipe', authenticate(true), recordSwipe);
 router.get('/:lobbyId/voting', authenticate(true), getVotingData);
 router.post('/:lobbyId/vote', authenticate(true), submitVote);
 router.get('/:lobbyId/results', authenticate(true), getResults);
+
+// Session management endpoints
+router.post('/:lobbyId/reset', authenticate(true), resetLobby);
+router.post('/:lobbyId/leave', authenticate(true), leaveLobby);
 
 module.exports = router;

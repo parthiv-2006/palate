@@ -806,3 +806,146 @@ exports.getResults = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * Reset lobby for a new matching round (host only)
+ */
+exports.resetLobby = async (req, res, next) => {
+  try {
+    const { lobbyId } = req.params;
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        error: { message: 'Authentication required' },
+      });
+    }
+
+    const lobby = await Lobby.findById(lobbyId);
+    
+    if (!lobby) {
+      return res.status(404).json({
+        error: { message: 'Lobby not found' },
+      });
+    }
+
+    // Only host can reset the lobby
+    if (lobby.host_id.toString() !== userId) {
+      return res.status(403).json({
+        error: { message: 'Only the host can reset the lobby' },
+      });
+    }
+
+    // Only allow reset from 'completed' or 'waiting' status
+    if (!['completed', 'waiting'].includes(lobby.status)) {
+      return res.status(400).json({
+        error: { message: 'Cannot reset lobby while matching or voting is in progress' },
+      });
+    }
+
+    // Clear all matching/voting data
+    lobby.swipes = [];
+    lobby.matchingRestaurants = [];
+    lobby.consensusRestaurants = [];
+    lobby.votes = [];
+    lobby.winningRestaurant = undefined;
+    lobby.status = 'waiting';
+
+    await lobby.save();
+
+    res.json({
+      success: true,
+      message: 'Lobby reset successfully',
+      lobby: {
+        id: lobby._id,
+        code: lobby.code,
+        status: lobby.status,
+        participants: lobby.participants,
+      },
+    });
+  } catch (error) {
+    if (error.name === 'CastError') {
+      return res.status(404).json({
+        error: { message: 'Lobby not found' },
+      });
+    }
+    next(error);
+  }
+};
+
+/**
+ * Leave a lobby
+ */
+exports.leaveLobby = async (req, res, next) => {
+  try {
+    const { lobbyId } = req.params;
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        error: { message: 'Authentication required' },
+      });
+    }
+
+    const lobby = await Lobby.findById(lobbyId);
+    
+    if (!lobby) {
+      return res.status(404).json({
+        error: { message: 'Lobby not found' },
+      });
+    }
+
+    // Check if user is a participant
+    const participantIndex = lobby.participants.findIndex(
+      p => p.user_id.toString() === userId
+    );
+
+    if (participantIndex === -1) {
+      return res.status(400).json({
+        error: { message: 'You are not a participant in this lobby' },
+      });
+    }
+
+    const isHost = lobby.host_id.toString() === userId;
+    
+    // Remove the participant
+    lobby.participants.splice(participantIndex, 1);
+
+    // If no participants left, delete the lobby
+    if (lobby.participants.length === 0) {
+      await Lobby.findByIdAndDelete(lobbyId);
+      return res.json({
+        success: true,
+        message: 'You left the lobby. Lobby was deleted as no participants remain.',
+        lobbyDeleted: true,
+      });
+    }
+
+    // If host left, transfer host to next participant
+    if (isHost && lobby.participants.length > 0) {
+      const newHost = lobby.participants[0];
+      lobby.host_id = newHost.user_id;
+      newHost.isHost = true;
+    }
+
+    // Remove user's swipes and votes from the session
+    lobby.swipes = lobby.swipes.filter(s => s.user_id.toString() !== userId);
+    lobby.votes = lobby.votes.filter(v => v.user_id.toString() !== userId);
+
+    await lobby.save();
+
+    res.json({
+      success: true,
+      message: isHost ? 'You left the lobby. Host transferred to another participant.' : 'You left the lobby.',
+      lobbyDeleted: false,
+      newHostId: isHost ? lobby.host_id.toString() : null,
+    });
+  } catch (error) {
+    if (error.name === 'CastError') {
+      return res.status(404).json({
+        error: { message: 'Lobby not found' },
+      });
+    }
+    next(error);
+  }
+};

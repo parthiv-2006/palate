@@ -11,7 +11,7 @@ export default function VotingPage() {
   const params = useParams();
   const router = useRouter();
   const lobbyId = params.lobbyId;
-  const { isAuthenticated, hasHydrated } = useAuth();
+  const { isAuthenticated, hasHydrated, user } = useAuth();
   const queryClient = useQueryClient();
   const [selectedRestaurant, setSelectedRestaurant] = useState(null);
 
@@ -24,6 +24,26 @@ export default function VotingPage() {
     enabled: !!lobbyId && hasHydrated && isAuthenticated,
     refetchInterval: 3000, // Poll for updates
   });
+
+  // Fetch lobby data to check if user is host and handle status changes
+  const { data: lobbyData } = useQuery({
+    queryKey: ['lobby', lobbyId],
+    queryFn: () => lobbyApi.get(lobbyId),
+    enabled: !!lobbyId && hasHydrated && isAuthenticated,
+    refetchInterval: 3000, // Poll for status changes (e.g., after reset)
+  });
+
+  const isHost = lobbyData?.host_id === user?.userId;
+
+  // Redirect if lobby was reset (status changed to 'waiting')
+  useEffect(() => {
+    if (lobbyData?.status === 'waiting') {
+      toast('Lobby was reset. Returning to lobby room...', { icon: '🔄' });
+      router.push(`/lobby/${lobbyId}/room`);
+    } else if (lobbyData?.status === 'matching') {
+      router.push(`/matching/${lobbyId}`);
+    }
+  }, [lobbyData?.status, lobbyId, router]);
 
   // Vote mutation
   const voteMutation = useMutation({
@@ -42,6 +62,37 @@ export default function VotingPage() {
     },
     onError: (error) => {
       toast.error(error.message || 'Failed to record vote');
+    },
+  });
+
+  // Reset lobby mutation
+  const resetMutation = useMutation({
+    mutationFn: async () => {
+      return lobbyApi.resetLobby(lobbyId);
+    },
+    onSuccess: () => {
+      toast.success('Lobby reset! Starting new round...');
+      queryClient.invalidateQueries(['lobby', lobbyId]);
+      queryClient.invalidateQueries(['voting', lobbyId]);
+      router.push(`/lobby/${lobbyId}/room`);
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Failed to reset lobby');
+    },
+  });
+
+  // Leave lobby mutation
+  const leaveMutation = useMutation({
+    mutationFn: async () => {
+      return lobbyApi.leaveLobby(lobbyId);
+    },
+    onSuccess: (data) => {
+      toast.success(data.message || 'You left the lobby');
+      queryClient.invalidateQueries(['lobby', lobbyId]);
+      router.push('/lobby/create');
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Failed to leave lobby');
     },
   });
 
@@ -92,17 +143,49 @@ export default function VotingPage() {
     );
   }
 
+  // Handle error - check if it's because lobby was reset
   if (error) {
+    // If lobby status is available and not in voting phase, redirect appropriately
+    if (lobbyData?.status === 'waiting') {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-orange-50 to-yellow-50 flex items-center justify-center p-4">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Lobby was reset. Redirecting...</p>
+          </div>
+        </div>
+      );
+    }
+    
+    if (lobbyData?.status === 'matching') {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-orange-50 to-yellow-50 flex items-center justify-center p-4">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Redirecting to matching...</p>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-50 to-yellow-50 flex items-center justify-center p-4">
         <div className="text-center">
           <p className="text-red-600 mb-4">{error.message || 'Failed to load voting data'}</p>
-          <button
-            onClick={() => refetch()}
-            className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
-          >
-            Try Again
-          </button>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => refetch()}
+              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+            >
+              Try Again
+            </button>
+            <button
+              onClick={() => router.push(`/lobby/${lobbyId}/room`)}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+            >
+              Back to Lobby
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -141,14 +224,50 @@ export default function VotingPage() {
               </div>
             )}
 
-            <div className="flex gap-4 justify-center">
+            {/* Session Stats */}
+            <div className="mb-8 p-4 bg-gray-50 rounded-xl">
+              <h3 className="text-sm font-semibold text-gray-500 mb-3">Session Stats</h3>
+              <div className="flex justify-center gap-6 text-sm">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-gray-900">{votingData?.participantCount || 0}</div>
+                  <div className="text-gray-500">Participants</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-gray-900">{votingData?.restaurants?.length || 0}</div>
+                  <div className="text-gray-500">Consensus Picks</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-gray-900">{votingData?.voteCount || 0}</div>
+                  <div className="text-gray-500">Total Votes</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              {isHost && (
+                <button
+                  onClick={() => resetMutation.mutate()}
+                  disabled={resetMutation.isPending}
+                  className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {resetMutation.isPending ? 'Resetting...' : 'Start New Round'}
+                </button>
+              )}
               <button
-                onClick={() => router.push('/lobby/create')}
-                className="px-6 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-semibold transition-colors"
+                onClick={() => leaveMutation.mutate()}
+                disabled={leaveMutation.isPending}
+                className="px-6 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Back to Home
+                {leaveMutation.isPending ? 'Leaving...' : 'Leave Lobby'}
               </button>
             </div>
+
+            {!isHost && (
+              <p className="mt-4 text-sm text-gray-500">
+                Only the host can start a new round. Waiting for host...
+              </p>
+            )}
           </div>
         </div>
       </div>
