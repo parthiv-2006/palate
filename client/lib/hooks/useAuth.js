@@ -6,6 +6,7 @@ export function useAuth() {
   const { user, token, isLoading, error, _hasHydrated, setUser, setToken, setLoading, setError, logout } = useAuthStore();
   const router = useRouter();
 
+  /*
   const register = async (username, password, confirmPassword) => {
     setLoading(true);
     setError(null);
@@ -13,6 +14,21 @@ export function useAuth() {
       const result = await registerWithPassword(username, password, confirmPassword);
       setUser({ username, id: result.userId });
       setToken(result.token);
+      router.push('/onboarding');
+    } catch (err) {
+      setError(err.message || 'Registration failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+  */
+
+  const register = async (username, tokenFromServer) => {
+    setLoading(true);
+    setError(null);
+    try {
+      setUser({ username, id: username }); // hackathon scuffed, you can get id from server later
+      setToken(tokenFromServer);
       router.push('/onboarding');
     } catch (err) {
       setError(err.message || 'Registration failed. Please try again.');
@@ -36,6 +52,12 @@ export function useAuth() {
     }
   };
 
+  const loginWithToken = (username, tokenFromServer) => {
+    setUser({ username, id: username });
+    setToken(tokenFromServer);
+    router.push('/lobby/create');
+  };
+
   return {
     user,
     token,
@@ -43,6 +65,7 @@ export function useAuth() {
     error,
     register,
     login,
+    loginWithToken,
     logout,
     isAuthenticated: !!(user && token),
     hasHydrated: _hasHydrated, // Expose hydration state

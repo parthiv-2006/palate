@@ -1,5 +1,24 @@
 const mongoose = require('mongoose');
 
+const webauthnCredentialSchema = new mongoose.Schema({
+  credentialID: {
+    type: Buffer,
+    required: true,
+  },
+  publicKey: {
+    type: Buffer,
+    required: true,
+  },
+  counter: {
+    type: Number,
+    required: true,
+  },
+  transports: {
+    type: [String],
+    default: [],
+  },
+});
+
 const userSchema = new mongoose.Schema({
   username: {
     type: String,
@@ -12,6 +31,11 @@ const userSchema = new mongoose.Schema({
     required: false, // Optional during user creation, but required for login
     select: false, // Don't return password by default
   },
+  webauthnCredentials: {
+    type: [webauthnCredentialSchema],
+    default: [],
+  },
+  challenge: { type: String, default: null },
   preferences: {
     spice_level: {
       type: String,

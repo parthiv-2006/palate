@@ -1,6 +1,6 @@
 'use client';
 
-import { PasswordForm } from '@/components/auth/PasswordForm';
+import { AuthForm } from '@/components/auth/PasswordForm';
 import Link from 'next/link';
 
 export default function LandingPage() {
@@ -13,7 +13,7 @@ export default function LandingPage() {
         </div>
         
         <div className="space-y-4">
-          <PasswordForm mode="register" />
+          <AuthForm mode="register" />
         </div>
 
         <div className="pt-4 border-t">
