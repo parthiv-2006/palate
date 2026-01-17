@@ -73,7 +73,7 @@ Backend: Node.js / Express.
 Database: MongoDB Atlas.
 AI: Google Gemini API (via Vertex AI or Google AI Studio).
 Auth: WebAuthn Passkeys (compatible with 1Password) via @simplewebauthn library. Fallback: Guest Mode for demo resilience.
-Analytics: Amplitude SDK.
+Analytics: Custom event tracking system following Amplitude principles (behavioral events → AI insights → product adaptation). Events stored locally/in-memory or sent to backend for analysis.
 
 6. Work Breakdown Structure (Team of 4)
 To ensure an even split, we divide roles by Functional Domain, minimizing merge conflicts.
@@ -93,13 +93,14 @@ Prompt Engineering: Design the complex prompt that takes JSON inputs (5 users) a
 Prompt: "User A is Vegan, User B hates cilantro. Find a cuisine that satisfies both."
 Build the "Restaurant Fetcher" (integrate with Yelp/Google Places API or a mock dataset).
 Hackathon Win Condition: The recommendations need to feel "magical," not random.
-Yichon - Member 3: The "Analyst" (Amplitude & Loop)
-Primary Responsibility: Analytics, Events & Self-Improving Logic.
+Yichon - Member 3: The "Analyst" (Amplitude Principles & Loop)
+Primary Responsibility: Behavioral Event Tracking, AI Analysis & Self-Improving Logic.
 Tasks:
-Set up Amplitude SDK.
-Event Instrumentation: Define and trigger events: view_restaurant, vote_yes, vote_no, conflict_detected.
-The "Loop": Write a script/function that queries Amplitude data to find user patterns (e.g., "User loves Asian food on weekends") and updates the User Profile in MongoDB.
-Hackathon Win Condition: You must demo the insight. Show a dashboard graph during the pitch: "Look, the AI learned User X hates spicy food after 3 swipes."3.
+Build custom event tracking system following Amplitude principles (product analytics-style events with properties).
+Event Instrumentation: Define and track behavioral events: lobby_joined, swipe_right, swipe_left, vote_yes, vote_no, restaurant_viewed, session_abandoned. Store events locally/in-memory or send to backend.
+The "Amplitude-Style Loop": Write a script/function that analyzes behavioral event patterns using AI (Gemini) to find user preferences (e.g., "User swipes left on 80% of spicy dishes → update taste profile"). Update User Profile in MongoDB based on AI insights.
+Frontend Integration: Create event tracking utilities for frontend team to instrument events consistently.
+Hackathon Win Condition: You must demo the insight. Show a dashboard during the pitch: "Look, the AI learned User X hates spicy food after analyzing 3 swipe-left events on Thai restaurants. The profile was automatically updated." Demonstrate the full loop: Events → AI Analysis → Profile Update → Better Recommendations.
 Parthiv - Member 4: The "Face" (Frontend & Auth)
 Primary Responsibility: UI/UX & Passkey Integration (1Password Challenge).
 Tasks:
@@ -149,12 +150,21 @@ JSON
   }
 }
 
-Amplitude Event Schema (Member 3 Reference):
+Behavioral Event Schema (Following Amplitude Principles):
 Event: session_vote
-restaurant_cuisine: "Thai"
-vote_direction: "reject"
-user_mood: "hungry"
-lobby_size: 4
+Properties:
+  restaurant_cuisine: "Thai"
+  vote_direction: "reject"
+  user_mood: "hungry"
+  lobby_size: 4
+  timestamp: 1234567890
+
+Example Events:
+- lobby_joined: { lobby_id, user_id, lobby_size, timestamp }
+- swipe_right: { restaurant_id, restaurant_cuisine, lobby_id, timestamp }
+- swipe_left: { restaurant_id, restaurant_cuisine, lobby_id, timestamp }
+- vote_yes: { restaurant_id, restaurant_cuisine, lobby_id, timestamp }
+- restaurant_viewed: { restaurant_id, view_duration, timestamp }
 
 8. Timeline (24-Hour Sprint)
 Friday 9 PM - 11 PM:
@@ -164,7 +174,7 @@ Tech stack decisions: Confirm @simplewebauthn for Passkeys, react-query for data
 Saturday 9 AM - 12 PM:
 M1: API routes live (POST /create-lobby, GET /restaurants, POST /submit-vote).
 M2: Gemini API client set up, generating text responses.
-M3: Amplitude SDK configured, receiving dummy events.
+M3: Custom event tracking system built (following Amplitude principles), tracking behavioral events.
 M4: Next.js setup + Passkey registration/login implementation (priority: get this working early!). Test with 1Password extension.
 
 Saturday 12 PM - 3 PM:
@@ -175,14 +185,14 @@ M4: Landing page + onboarding form + lobby code system + lobby view UI.
 
 Saturday 3 PM - 6 PM:
 Connect: Hook Frontend to Backend APIs. Test full data flow.
-M2+M3: Connect Amplitude "Insights" to update User Profile in MongoDB.
-M4: Swipe mechanism + voting UI + security transparency features (tooltips, badges).
+M3: Build event tracking system. Connect event analysis (using Gemini AI) to update User Profile in MongoDB. Demonstrate "Amplitude-style loop": Events → AI Analysis → Profile Update.
+M4: Swipe mechanism + voting UI + security transparency features (tooltips, badges) + event instrumentation.
 All: Integration testing, fix critical bugs.
 
 Saturday 6 PM - 8 PM:
 All: Polish CSS, animations, loading states, error handling.
 M4: Responsive design refinement, keyboard shortcuts, accessibility checks.
-M2+M3: Test feedback loop, ensure Amplitude events are logging correctly.
+M2+M3: Test feedback loop, ensure behavioral events are tracking correctly and AI analysis is updating profiles.
 
 Saturday 8 PM - Midnight:
 All: End-to-end testing with multiple users (test lobby flow).
