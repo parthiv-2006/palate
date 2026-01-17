@@ -68,7 +68,7 @@ const lobbySchema = new mongoose.Schema({
       default: Date.now,
     },
   }],
-  swipes: [{
+  votes: [{
     user_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -78,15 +78,18 @@ const lobbySchema = new mongoose.Schema({
       type: String, // Can be ObjectId or external ID
       required: true,
     },
-    direction: {
+    vote: {
       type: String,
-      enum: ['left', 'right'],
+      enum: ['yes', 'no'],
       required: true,
     },
     timestamp: {
       type: Date,
       default: Date.now,
     },
+  }],
+  consensusRestaurants: [{
+    type: String, // Restaurant IDs that all participants swiped right on
   }],
 }, {
   timestamps: true,

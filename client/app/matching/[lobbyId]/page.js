@@ -15,14 +15,25 @@ export default function MatchingPage() {
   const { isAuthenticated, hasHydrated } = useAuth();
   const [restaurants, setRestaurants] = useState([]);
 
+  // Fetch lobby status to check if we should redirect to voting
+  const { data: lobbyData } = useQuery({
+    queryKey: ['lobby', lobbyId],
+    queryFn: async () => {
+      return lobbyApi.get(lobbyId);
+    },
+    enabled: !!lobbyId && hasHydrated && isAuthenticated,
+    refetchInterval: 2000, // Check lobby status every 2 seconds
+  });
+
   // Fetch restaurants
-  const { data: restaurantsData, isLoading: isLoadingRestaurants, refetch: refetchRestaurants } = useQuery({
+  const { data: restaurantsData, isLoading: isLoadingRestaurants, refetch: refetchRestaurants, error: restaurantsError } = useQuery({
     queryKey: ['restaurants', lobbyId],
     queryFn: async () => {
       return lobbyApi.getRestaurants(lobbyId);
     },
-    enabled: !!lobbyId && hasHydrated && isAuthenticated,
+    enabled: !!lobbyId && hasHydrated && isAuthenticated && lobbyData?.status === 'matching',
     refetchInterval: 5000, // Refetch every 5 seconds to get new restaurants
+    retry: false, // Don't retry if lobby is not in matching status
   });
 
   // Swipe mutation
@@ -45,10 +56,20 @@ export default function MatchingPage() {
   });
 
   useEffect(() => {
+    // Check if lobby status changed to voting
+    if (lobbyData?.status === 'voting') {
+      toast.success('Group match found! Moving to voting...');
+      setTimeout(() => {
+        router.push(`/voting/${lobbyId}`);
+      }, 1500);
+      return;
+    }
+
+    // Update restaurants from API
     if (restaurantsData?.restaurants) {
       setRestaurants(restaurantsData.restaurants);
     }
-  }, [restaurantsData]);
+  }, [restaurantsData, lobbyData, lobbyId, router]);
 
   useEffect(() => {
     if (hasHydrated && !isAuthenticated) {
@@ -58,10 +79,19 @@ export default function MatchingPage() {
 
   const handleSwipe = async (restaurantId, direction) => {
     try {
-      await swipeMutation.mutateAsync({ restaurantId, direction });
+      const result = await swipeMutation.mutateAsync({ restaurantId, direction });
       
       // Remove swiped restaurant from local state
       setRestaurants(prev => prev.filter(r => r.id !== restaurantId));
+      
+      // Check if consensus reached (backup check in case redirect didn't happen)
+      if (result.consensusReached && result.consensusRestaurants?.length > 0) {
+        toast.success('Group match found! Moving to voting...');
+        setTimeout(() => {
+          router.push(`/voting/${lobbyId}`);
+        }, 1500);
+        return;
+      }
       
       // Track event (for Amplitude-style analytics)
       if (typeof window !== 'undefined') {
@@ -74,10 +104,31 @@ export default function MatchingPage() {
   };
 
   const handleEmpty = () => {
+    // Check if lobby is still in matching status before refetching
+    if (lobbyData?.status === 'voting') {
+      toast.success('Group match found! Moving to voting...');
+      setTimeout(() => {
+        router.push(`/voting/${lobbyId}`);
+      }, 1500);
+      return;
+    }
+
     toast('You\'ve swiped through all restaurants! Fetching more...', {
       icon: 'ℹ️',
     });
-    refetchRestaurants();
+    
+    // Refetch restaurants
+    refetchRestaurants().catch((error) => {
+      // If error is because lobby is now in voting, redirect
+      if (error?.message?.includes('not in matching phase') || error?.message?.includes('voting')) {
+        toast.success('Group match found! Moving to voting...');
+        setTimeout(() => {
+          router.push(`/voting/${lobbyId}`);
+        }, 1500);
+      } else {
+        toast.error('No more restaurants available. Waiting for consensus...');
+      }
+    });
   };
 
   if (!hasHydrated || (!isAuthenticated && hasHydrated)) {
@@ -91,12 +142,42 @@ export default function MatchingPage() {
     );
   }
 
-  if (isLoadingRestaurants) {
+  // Show loading if we're checking lobby status or loading restaurants
+  if (!lobbyData || isLoadingRestaurants) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 flex items-center justify-center p-4">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading restaurants...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If lobby is in voting status, show message while redirecting
+  if (lobbyData.status === 'voting') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 flex items-center justify-center p-4">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Group match found! Redirecting to voting...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If there's an error fetching restaurants and lobby is still in matching, show error
+  if (restaurantsError && lobbyData.status === 'matching') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 flex items-center justify-center p-4">
+        <div className="text-center">
+          <p className="text-gray-600 mb-4">Unable to fetch restaurants. Please try again.</p>
+          <button
+            onClick={() => refetchRestaurants()}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );
@@ -113,11 +194,31 @@ export default function MatchingPage() {
           </p>
         </div>
 
-        <SwipeStack
-          restaurants={restaurants}
-          onSwipe={handleSwipe}
-          onEmpty={handleEmpty}
-        />
+        {restaurants.length > 0 ? (
+          <SwipeStack
+            restaurants={restaurants}
+            onSwipe={handleSwipe}
+            onEmpty={handleEmpty}
+          />
+        ) : (
+          <div className="w-full h-[600px] flex items-center justify-center bg-gray-50 rounded-2xl">
+            <div className="text-center">
+              <p className="text-xl text-gray-600 mb-2">No more restaurants to swipe</p>
+              <p className="text-sm text-gray-500 mb-4">Waiting for more options...</p>
+              <button
+                onClick={() => {
+                  refetchRestaurants();
+                  if (lobbyData?.status === 'voting') {
+                    router.push(`/voting/${lobbyId}`);
+                  }
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Keyboard shortcuts hint */}
         <div className="mt-24 text-center">

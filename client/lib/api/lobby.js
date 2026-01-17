@@ -18,4 +18,13 @@ export const lobbyApi = {
     method: 'POST',
     body: JSON.stringify({ restaurantId, direction }),
   }),
+  
+  submitVote: (lobbyId, restaurantId, vote) => apiRequest(`/lobby/${lobbyId}/vote`, {
+    method: 'POST',
+    body: JSON.stringify({ restaurantId, vote }),
+  }),
+  
+  getVotes: (lobbyId) => apiRequest(`/lobby/${lobbyId}/votes`),
+  
+  getResults: (lobbyId) => apiRequest(`/lobby/${lobbyId}/results`),
 };
