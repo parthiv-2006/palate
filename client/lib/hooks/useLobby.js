@@ -9,7 +9,8 @@ export function useLobby(lobbyId) {
   const { data: lobby, isLoading, refetch } = useQuery({
     queryKey: ['lobby', lobbyId],
     queryFn: async () => {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/lobby/${lobbyId}`, {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+      const response = await fetch(`${API_URL}/lobby/${lobbyId}`, {
         headers: {
           'Content-Type': 'application/json',
           ...(token && { Authorization: `Bearer ${token}` }),
@@ -17,7 +18,8 @@ export function useLobby(lobbyId) {
       });
       
       if (!response.ok) {
-        throw new Error('Failed to fetch lobby');
+        const errorData = await response.json().catch(() => ({ error: { message: 'Failed to fetch lobby' } }));
+        throw new Error(errorData.error?.message || `Failed to fetch lobby (${response.status})`);
       }
       
       return response.json();

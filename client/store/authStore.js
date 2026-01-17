@@ -12,7 +12,11 @@ export const useAuthStore = create(
 
       setUser: (user) => set({ user, isGuest: false }),
       setToken: (token) => set({ token }),
-      setGuest: () => set({ isGuest: true, user: { id: `guest_${Date.now()}`, name: 'Guest' } }),
+      setGuest: () => {
+        // Generate guest ID only on client side to avoid hydration mismatches
+        const guestId = typeof window !== 'undefined' ? `guest_${Date.now()}` : 'guest_temp';
+        set({ isGuest: true, user: { id: guestId, name: 'Guest' } });
+      },
       setLoading: (isLoading) => set({ isLoading }),
       setError: (error) => set({ error }),
       logout: () => set({ user: null, token: null, isGuest: false, error: null }),

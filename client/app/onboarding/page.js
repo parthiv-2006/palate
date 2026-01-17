@@ -18,8 +18,10 @@ export default function OnboardingPage() {
 
   const handleSubmit = async (preferences) => {
     try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+      
       // Save preferences to backend
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/preferences`, {
+      const response = await fetch(`${API_URL}/user/preferences`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -32,8 +34,8 @@ export default function OnboardingPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Failed to save preferences' }));
-        throw new Error(errorData.message || 'Failed to save preferences');
+        const errorData = await response.json().catch(() => ({ error: { message: 'Failed to save preferences' } }));
+        throw new Error(errorData.error?.message || errorData.message || `Failed to save preferences (${response.status})`);
       }
 
       // Success - redirect to lobby creation

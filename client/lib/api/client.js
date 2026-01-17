@@ -1,6 +1,6 @@
 import { useAuthStore } from '@/store/authStore';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
 export async function apiRequest(endpoint, options = {}) {
   const { token } = useAuthStore.getState();
@@ -17,8 +17,9 @@ export async function apiRequest(endpoint, options = {}) {
   const response = await fetch(`${API_URL}${endpoint}`, config);
   
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: response.statusText }));
-    throw new Error(errorData.message || `API Error: ${response.statusText}`);
+    const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }));
+    const errorMessage = errorData.error?.message || errorData.message || `API Error: ${response.statusText}`;
+    throw new Error(errorMessage);
   }
 
   return response.json();

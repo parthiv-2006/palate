@@ -6,15 +6,18 @@ import { startRegistration, startAuthentication } from '@simplewebauthn/browser'
  * @returns {Promise<{success: boolean, userId: string}>} - Registration response
  */
 export async function registerPasskey(username) {
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+  
   // Step 1: Get registration options from backend
-  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/passkey/register-options`, {
+  const response = await fetch(`${API_URL}/auth/passkey/register-options`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username })
   });
   
   if (!response.ok) {
-    throw new Error('Failed to get registration options');
+    const errorData = await response.json().catch(() => ({ error: { message: 'Failed to get registration options' } }));
+    throw new Error(errorData.error?.message || `Failed to get registration options (${response.status})`);
   }
   
   const options = await response.json();
@@ -23,14 +26,15 @@ export async function registerPasskey(username) {
   const attestation = await startRegistration(options);
 
   // Step 3: Send attestation to backend for verification
-  const verifyResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/passkey/register-verify`, {
+  const verifyResponse = await fetch(`${API_URL}/auth/passkey/register-verify`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, attestation })
   });
 
   if (!verifyResponse.ok) {
-    throw new Error('Passkey registration verification failed');
+    const errorData = await verifyResponse.json().catch(() => ({ error: { message: 'Passkey registration verification failed' } }));
+    throw new Error(errorData.error?.message || `Passkey registration verification failed (${verifyResponse.status})`);
   }
 
   const result = await verifyResponse.json();
@@ -46,15 +50,18 @@ export async function registerPasskey(username) {
  * @returns {Promise<{success: boolean, token: string, userId: string}>} - Auth result
  */
 export async function authenticatePasskey(username) {
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+  
   // Step 1: Get authentication options from backend
-  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/passkey/auth-options`, {
+  const response = await fetch(`${API_URL}/auth/passkey/auth-options`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username })
   });
   
   if (!response.ok) {
-    throw new Error('Failed to get authentication options');
+    const errorData = await response.json().catch(() => ({ error: { message: 'Failed to get authentication options' } }));
+    throw new Error(errorData.error?.message || `Failed to get authentication options (${response.status})`);
   }
   
   const options = await response.json();
@@ -63,14 +70,15 @@ export async function authenticatePasskey(username) {
   const assertion = await startAuthentication(options);
 
   // Step 3: Send assertion to backend for verification
-  const verifyResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/passkey/auth-verify`, {
+  const verifyResponse = await fetch(`${API_URL}/auth/passkey/auth-verify`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, assertion })
   });
 
   if (!verifyResponse.ok) {
-    throw new Error('Passkey authentication verification failed');
+    const errorData = await verifyResponse.json().catch(() => ({ error: { message: 'Passkey authentication verification failed' } }));
+    throw new Error(errorData.error?.message || `Passkey authentication verification failed (${verifyResponse.status})`);
   }
 
   const result = await verifyResponse.json();
