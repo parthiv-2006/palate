@@ -2,6 +2,7 @@
 
 export function AllergySelector({ value = [], onChange }) {
   const allergies = [
+    // Top 8 Allergens (Big 8)
     { id: 'peanuts', label: 'Peanuts' },
     { id: 'tree-nuts', label: 'Tree Nuts' },
     { id: 'dairy', label: 'Dairy' },
@@ -10,6 +11,14 @@ export function AllergySelector({ value = [], onChange }) {
     { id: 'wheat', label: 'Wheat/Gluten' },
     { id: 'fish', label: 'Fish' },
     { id: 'shellfish', label: 'Shellfish' },
+    // Additional Common Allergies
+    { id: 'sesame', label: 'Sesame' },
+    { id: 'sulfites', label: 'Sulfites' },
+    { id: 'mustard', label: 'Mustard' },
+    { id: 'lupin', label: 'Lupin' },
+    { id: 'molluscs', label: 'Molluscs' },
+    { id: 'celery', label: 'Celery' },
+    { id: 'corn', label: 'Corn' },
   ];
 
   const toggleAllergy = (allergyId) => {
@@ -22,7 +31,7 @@ export function AllergySelector({ value = [], onChange }) {
   return (
     <div className="space-y-2">
       <label className="block text-sm font-medium text-gray-700">Allergies & Dietary Restrictions</label>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
         {allergies.map((allergy) => (
           <button
             key={allergy.id}
