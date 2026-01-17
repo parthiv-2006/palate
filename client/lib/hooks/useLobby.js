@@ -29,7 +29,7 @@ export function useLobby(lobbyId) {
       const data = await response.json();
       return data;
     },
-    refetchInterval: 2000, // Poll every 2 seconds
+    refetchInterval: 1000, // Poll every 1 second to catch status changes quickly
     enabled: !!lobbyId, // Only run query if lobbyId exists
     retry: 2, // Retry failed requests
     staleTime: 0, // Always consider data stale to ensure fresh updates

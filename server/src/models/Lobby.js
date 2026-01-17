@@ -80,7 +80,7 @@ const lobbySchema = new mongoose.Schema({
   matchingRestaurants: [{
     type: String, // Restaurant IDs
   }],
-  swipes: [{
+  votes: [{
     user_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -90,9 +90,9 @@ const lobbySchema = new mongoose.Schema({
       type: String, // Can be ObjectId or external ID
       required: true,
     },
-    direction: {
+    vote: {
       type: String,
-      enum: ['left', 'right'],
+      enum: ['yes', 'no'],
       required: true,
     },
     timestamp: {

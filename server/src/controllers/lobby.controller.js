@@ -1172,3 +1172,338 @@ exports.getVibeCheckStatus = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * Submit a vote for a restaurant
+ */
+exports.submitVote = async (req, res, next) => {
+  try {
+    const { lobbyId } = req.params;
+    const userId = req.user?.userId;
+    const { restaurantId, vote } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({
+        error: { message: 'Authentication required' },
+      });
+    }
+
+    if (!restaurantId || !vote) {
+      return res.status(400).json({
+        error: { message: 'Restaurant ID and vote (yes/no) are required' },
+      });
+    }
+
+    if (!['yes', 'no'].includes(vote)) {
+      return res.status(400).json({
+        error: { message: 'Vote must be "yes" or "no"' },
+      });
+    }
+
+    const lobby = await Lobby.findById(lobbyId);
+    
+    if (!lobby) {
+      return res.status(404).json({
+        error: { message: 'Lobby not found' },
+      });
+    }
+
+    // Check if lobby is in voting status
+    if (lobby.status !== 'voting') {
+      return res.status(400).json({
+        error: { message: 'Lobby is not in voting phase' },
+      });
+    }
+
+    // Check if restaurant is in consensus restaurants
+    if (!lobby.consensusRestaurants || !lobby.consensusRestaurants.includes(restaurantId)) {
+      return res.status(400).json({
+        error: { message: 'Restaurant is not available for voting' },
+      });
+    }
+
+    // Check if user is a participant
+    const isParticipant = lobby.participants.some(p => p.user_id.toString() === userId);
+    if (!isParticipant) {
+      return res.status(403).json({
+        error: { message: 'You must be a participant to vote' },
+      });
+    }
+
+    // Initialize votes array if it doesn't exist
+    if (!lobby.votes) {
+      lobby.votes = [];
+    }
+
+    // Check if user already voted for this restaurant
+    const existingVote = lobby.votes.find(
+      v => v.user_id.toString() === userId && v.restaurant_id === restaurantId
+    );
+
+    if (existingVote) {
+      // Update existing vote
+      existingVote.vote = vote;
+      existingVote.timestamp = new Date();
+    } else {
+      // Add new vote
+      lobby.votes.push({
+        user_id: userId,
+        restaurant_id: restaurantId,
+        vote,
+        timestamp: new Date(),
+      });
+    }
+
+    await lobby.save();
+
+    res.json({
+      success: true,
+      message: 'Vote recorded',
+    });
+  } catch (error) {
+    if (error.name === 'CastError') {
+      return res.status(404).json({
+        error: { message: 'Lobby not found' },
+      });
+    }
+    next(error);
+  }
+};
+
+/**
+ * Get current vote counts for all consensus restaurants
+ */
+exports.getVotes = async (req, res, next) => {
+  try {
+    const { lobbyId } = req.params;
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        error: { message: 'Authentication required' },
+      });
+    }
+
+    const lobby = await Lobby.findById(lobbyId);
+    
+    if (!lobby) {
+      return res.status(404).json({
+        error: { message: 'Lobby not found' },
+      });
+    }
+
+    // Check if lobby is in voting status
+    if (lobby.status !== 'voting') {
+      return res.status(400).json({
+        error: { message: 'Lobby is not in voting phase' },
+      });
+    }
+
+    // Check if user is a participant
+    const isParticipant = lobby.participants.some(p => p.user_id.toString() === userId);
+    if (!isParticipant) {
+      return res.status(403).json({
+        error: { message: 'You must be a participant to view votes' },
+      });
+    }
+
+    const votes = lobby.votes || [];
+    const participantCount = lobby.participants.length;
+
+    // Fetch restaurant details for consensus restaurants
+    const mongoose = require('mongoose');
+    const restaurantIds = lobby.consensusRestaurants
+      .filter(id => mongoose.Types.ObjectId.isValid(id))
+      .map(id => new mongoose.Types.ObjectId(id));
+    
+    const restaurantDocs = await Restaurant.find({ _id: { $in: restaurantIds } });
+    const restaurantsMap = {};
+    restaurantDocs.forEach(r => {
+      restaurantsMap[r._id.toString()] = {
+        id: r._id.toString(),
+        name: r.name,
+        cuisine: r.cuisine,
+        description: r.description,
+        image: r.image,
+        price_range: r.price_range,
+        location: r.location,
+        rating: r.rating,
+        dietary_options: r.dietary_options,
+        spice_level: r.spice_level,
+        tags: r.tags,
+      };
+    });
+
+    // Get vote counts for each consensus restaurant
+    const voteCounts = {};
+    const restaurants = [];
+    lobby.consensusRestaurants.forEach(restaurantId => {
+      const restaurantVotes = votes.filter(v => v.restaurant_id === restaurantId);
+      voteCounts[restaurantId] = {
+        yes: restaurantVotes.filter(v => v.vote === 'yes').length,
+        no: restaurantVotes.filter(v => v.vote === 'no').length,
+        total: restaurantVotes.length,
+        allVoted: restaurantVotes.length === participantCount,
+      };
+      
+      // Add restaurant to list
+      if (restaurantsMap[restaurantId]) {
+        restaurants.push(restaurantsMap[restaurantId]);
+      } else {
+        // Fallback if restaurant not found
+        restaurants.push({
+          id: restaurantId,
+          name: `Restaurant ${restaurants.length + 1}`,
+          cuisine: 'Unknown',
+        });
+      }
+    });
+
+    // Get user's votes
+    const userVotes = {};
+    votes
+      .filter(v => v.user_id.toString() === userId)
+      .forEach(v => {
+        userVotes[v.restaurant_id] = v.vote;
+      });
+
+    res.json({
+      success: true,
+      voteCounts,
+      userVotes,
+      restaurants,
+      participantCount,
+      allVoted: Object.values(voteCounts).every(vc => vc.allVoted),
+    });
+  } catch (error) {
+    if (error.name === 'CastError') {
+      return res.status(404).json({
+        error: { message: 'Lobby not found' },
+      });
+    }
+    next(error);
+  }
+};
+
+/**
+ * Get final voting results
+ */
+exports.getResults = async (req, res, next) => {
+  try {
+    const { lobbyId } = req.params;
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        error: { message: 'Authentication required' },
+      });
+    }
+
+    const lobby = await Lobby.findById(lobbyId).populate('participants.user_id', 'username');
+    
+    if (!lobby) {
+      return res.status(404).json({
+        error: { message: 'Lobby not found' },
+      });
+    }
+
+    // Check if lobby is in voting or completed status
+    if (lobby.status !== 'voting' && lobby.status !== 'completed') {
+      return res.status(400).json({
+        error: { message: 'Lobby voting has not started yet' },
+      });
+    }
+
+    // Check if user is a participant
+    const isParticipant = lobby.participants.some(p => p.user_id.toString() === userId);
+    if (!isParticipant) {
+      return res.status(403).json({
+        error: { message: 'You must be a participant to view results' },
+      });
+    }
+
+    const votes = lobby.votes || [];
+    const participantCount = lobby.participants.length;
+
+    // Fetch restaurant details for consensus restaurants
+    const mongoose = require('mongoose');
+    const restaurantIds = lobby.consensusRestaurants
+      .filter(id => mongoose.Types.ObjectId.isValid(id))
+      .map(id => new mongoose.Types.ObjectId(id));
+    
+    const restaurantDocs = await Restaurant.find({ _id: { $in: restaurantIds } });
+    const restaurantsMap = {};
+    restaurantDocs.forEach(r => {
+      restaurantsMap[r._id.toString()] = {
+        id: r._id.toString(),
+        name: r.name,
+        cuisine: r.cuisine,
+        description: r.description,
+        image: r.image,
+        price_range: r.price_range,
+        location: r.location,
+        rating: r.rating,
+        dietary_options: r.dietary_options,
+        spice_level: r.spice_level,
+        tags: r.tags,
+      };
+    });
+
+    // Calculate results for each consensus restaurant
+    const results = lobby.consensusRestaurants.map(restaurantId => {
+      const restaurantVotes = votes.filter(v => v.restaurant_id === restaurantId);
+      const yesCount = restaurantVotes.filter(v => v.vote === 'yes').length;
+      const noCount = restaurantVotes.filter(v => v.vote === 'no').length;
+      
+      return {
+        restaurantId,
+        restaurant: restaurantsMap[restaurantId] || {
+          id: restaurantId,
+          name: `Restaurant ${restaurantId.slice(-4)}`,
+          cuisine: 'Unknown',
+        },
+        yes: yesCount,
+        no: noCount,
+        total: restaurantVotes.length,
+        allVoted: restaurantVotes.length === participantCount,
+        score: yesCount - noCount, // Simple scoring: yes votes minus no votes
+      };
+    });
+
+    // Sort by score (highest first), then by yes count
+    results.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return b.yes - a.yes;
+    });
+
+    // Get winner (highest score)
+    const winner = results.length > 0 && results[0].score >= 0 ? results[0] : null;
+
+    // If all participants voted and we have a winner, mark lobby as completed
+    const allVoted = results.every(r => r.allVoted);
+    if (allVoted && winner && lobby.status === 'voting') {
+      lobby.status = 'completed';
+      await lobby.save();
+    }
+
+    res.json({
+      success: true,
+      results,
+      winner: winner ? {
+        restaurantId: winner.restaurantId,
+        restaurant: winner.restaurant,
+        yes: winner.yes,
+        no: winner.no,
+        score: winner.score,
+      } : null,
+      allVoted,
+    });
+  } catch (error) {
+    if (error.name === 'CastError') {
+      return res.status(404).json({
+        error: { message: 'Lobby not found' },
+      });
+    }
+    next(error);
+  }
+};
