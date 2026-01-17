@@ -6,8 +6,8 @@ export function useAuth() {
   const { user, token, isLoading, error, _hasHydrated, setUser, setToken, setLoading, setError, logout } = useAuthStore();
   const router = useRouter();
 
-  /*
-  const register = async (username, password, confirmPassword) => {
+  
+  const register1 = async (username, password, confirmPassword) => {
     setLoading(true);
     setError(null);
     try {
@@ -21,9 +21,8 @@ export function useAuth() {
       setLoading(false);
     }
   };
-  */
 
-  const register = async (username, tokenFromServer) => {
+  const register2 = async (username, tokenFromServer) => {
     setLoading(true);
     setError(null);
     try {
@@ -63,7 +62,8 @@ export function useAuth() {
     token,
     isLoading,
     error,
-    register,
+    register1,
+    register2,
     login,
     loginWithToken,
     logout,

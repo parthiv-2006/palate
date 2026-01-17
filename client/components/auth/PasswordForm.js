@@ -6,7 +6,7 @@ import * as SimpleWebAuthnBrowser from '@simplewebauthn/browser';
 
 
 function PasswordForm({ mode = 'login' }) {
-  const { register, login, isLoading, error } = useAuth();
+  const { register1, login, isLoading, error } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -39,7 +39,7 @@ function PasswordForm({ mode = 'login' }) {
       }
 
       try {
-        await register(username.trim(), password, confirmPassword);
+        await register1(username.trim(), password, confirmPassword);
       } catch (err) {
         // Error is handled by useAuth hook
       }
@@ -117,8 +117,8 @@ function PasswordForm({ mode = 'login' }) {
 
 const API_BASE = 'http://localhost:3001/api/auth'; // your Express backend
 
-export function AuthForm({ mode = 'login' }) {
-  const { register, login, loginWithToken, isLoading, error } = useAuth();
+function AuthForm({ mode = 'login' }) {
+  const { register2, login, loginWithToken, isLoading, error } = useAuth();
   const [username, setUsername] = useState('');
   const [validationError, setValidationError] = useState('');
 
@@ -162,7 +162,7 @@ export function AuthForm({ mode = 'login' }) {
 
       // Step 4: Use your auth hook to set state & navigate
       if (result.token) {
-        await register(username, result.token); // overload register to accept a token
+        await register2(username, result.token); // overload register to accept a token
       }
     } catch (err) {
       console.error(err);
@@ -249,5 +249,46 @@ export function AuthForm({ mode = 'login' }) {
             : 'Login'}
       </button>
     </form>
+  );
+}
+
+export function LoginRegisterTabs({ mode = 'login' }) {
+  const [method, setMethod] = useState('password'); // 'password' or 'passkey'
+
+  return (
+    <div className="max-w-md mx-auto p-4">
+      {/* Tabs */}
+      <div className="flex mb-4 border-b border-gray-300">
+        <button
+          className={`flex-1 py-2 ${
+            method === 'password'
+              ? 'border-b-2 border-blue-600 font-semibold'
+              : ''
+          }`}
+          onClick={() => setMethod('password')}
+        >
+          Password
+        </button>
+        <button
+          className={`flex-1 py-2 ${
+            method === 'passkey'
+              ? 'border-b-2 border-blue-600 font-semibold'
+              : ''
+          }`}
+          onClick={() => setMethod('passkey')}
+        >
+          Passkey
+        </button>
+      </div>
+
+      {/* Forms */}
+      <div>
+        {method === 'password' ? (
+          <PasswordForm mode={mode} />
+        ) : (
+          <AuthForm mode={mode} />
+        )}
+      </div>
+    </div>
   );
 }

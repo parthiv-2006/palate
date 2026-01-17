@@ -1,6 +1,6 @@
 'use client';
 
-import { AuthForm } from '@/components/auth/PasswordForm';
+import { LoginRegisterTabs } from '@/components/auth/PasswordForm';
 import Link from 'next/link';
 
 export default function LoginPage() {
@@ -13,7 +13,7 @@ export default function LoginPage() {
         </div>
         
         <div className="space-y-4">
-          <AuthForm mode="login" />
+          <LoginRegisterTabs mode="login" />
         </div>
 
         <div className="pt-4 border-t">
