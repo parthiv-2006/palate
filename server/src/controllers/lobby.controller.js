@@ -3,6 +3,8 @@ const User = require('../models/User');
 const Restaurant = require('../models/Restaurant');
 const generateLobbyCode = require('../utils/generateCode');
 const AppError = require('../utils/errors');
+const { generateKeywords } = require('../utils/gemini');
+const { fetchRestaurantsFromYelp } = require('../utils/yelp');
 
 /**
  * Create a new lobby
@@ -252,7 +254,7 @@ exports.getRestaurants = async (req, res, next) => {
     const { lobbyId } = req.params;
     const userId = req.user?.userId;
 
-    const lobby = await Lobby.findById(lobbyId).populate('participants.user_id', 'preferences');
+    const lobby = await Lobby.findById(lobbyId).populate('participants.user_id', 'preferences visits');
     
     if (!lobby) {
       return res.status(404).json({
@@ -359,24 +361,76 @@ exports.getRestaurants = async (req, res, next) => {
     const mongoose = require('mongoose');
     
     if (lobby.matchingRestaurants && lobby.matchingRestaurants.length >= 5) {
+      console.log(`Using ${lobby.matchingRestaurants.length} existing restaurants for lobby ${lobbyId}`);
       // Fetch the stored restaurants
       const storedIds = lobby.matchingRestaurants
         .filter(id => mongoose.Types.ObjectId.isValid(id))
         .map(id => new mongoose.Types.ObjectId(id));
       restaurants = await Restaurant.find({ _id: { $in: storedIds } });
     } else {
-      // First fetch or too few restaurants - get restaurants and store them
-      restaurants = await Restaurant.find(query).limit(20);
+      console.log(`No restaurants found for lobby ${lobbyId}, fetching from AI/Yelp...`);
+      
+      try {
+        // Aggregate participants' profiles
+        const userProfiles = lobby.participants
+          .map(p => p.user_id)
+          .filter(Boolean);
+        
+        // Aggregate vibe checks
+        const vibeChecks = lobby.participants
+          .map(p => p.vibeCheck)
+          .filter(Boolean);
+        
+        const combinedVibe = vibeChecks.length > 0 ? vibeChecks[0] : {}; // Simplified: take first or merge
+        
+        console.log(`Aggregated ${userProfiles.length} user profiles and ${vibeChecks.length} vibe checks for Gemini prompt.`);
+        
+        // 1. Generate keywords with Gemini
+        const keywords = await generateKeywords(userProfiles, combinedVibe);
+        
+        // 2. Fetch from Yelp
+        const yelpRestaurants = await fetchRestaurantsFromYelp(keywords, {
+          location: 'Toronto', // Could be dynamic if we had user location
+          limit: 15
+        });
 
-      // If too few restaurants match, get all restaurants (relaxed filtering)
+        if (yelpRestaurants.length === 0) {
+          console.warn('Yelp returned no restaurants, falling back to local DB');
+          restaurants = await Restaurant.find(query).limit(20);
+        } else {
+          // 3. Save/Update restaurants in our DB
+          const savedRestaurants = [];
+          for (const rData of yelpRestaurants) {
+            // Use external_id to avoid duplicates
+            let restaurant = await Restaurant.findOne({ external_id: rData.external_id });
+            if (restaurant) {
+              // Update existing
+              Object.assign(restaurant, rData);
+              await restaurant.save();
+            } else {
+              // Create new
+              restaurant = await Restaurant.create(rData);
+            }
+            savedRestaurants.push(restaurant);
+          }
+          restaurants = savedRestaurants;
+          console.log(`Successfully processed ${restaurants.length} restaurants from Yelp`);
+        }
+      } catch (aiError) {
+        console.error('AI fetching failed, falling back to local DB:', aiError);
+        restaurants = await Restaurant.find(query).limit(20);
+      }
+
+      // If still too few, get anything
       if (restaurants.length < 5) {
-        console.log('Preference filter too strict, fetching all restaurants');
+        console.log('Too few restaurants, fetching any available');
         restaurants = await Restaurant.find({}).limit(20);
       }
 
       // Store the restaurant IDs for this matching session
       lobby.matchingRestaurants = restaurants.map(r => r._id.toString());
       await lobby.save();
+      console.log(`Stored ${lobby.matchingRestaurants.length} restaurants in lobby ${lobbyId}`);
     }
 
     // Filter out already swiped restaurants for this user

@@ -1,9 +1,3 @@
----
-name: Create Status Document
-overview: Create a comprehensive status document for TasteSync that outlines what has been built (frontend and backend) and what remains to be built, organized by frontend and backend sections. This document will help the team and AI assistants understand the current state of the application.
-todos: []
----
-
 # TasteSync Project Status Document
 
 ## Overview
