@@ -7,6 +7,7 @@ import { lobbyApi } from '@/lib/api/lobby';
 import { userApi } from '@/lib/api/user';
 import toast from 'react-hot-toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Confetti } from '@/components/ui/Confetti';
 
 function Particles() {
   return (
@@ -33,6 +34,8 @@ export default function VotingPage() {
   const { isAuthenticated, hasHydrated, user } = useAuth();
   const queryClient = useQueryClient();
   const [selectedRestaurant, setSelectedRestaurant] = useState(null);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const confettiTriggeredRef = useRef(false);
 
   const { data: votingData, isLoading, error, refetch } = useQuery({
     queryKey: ['voting', lobbyId],
@@ -108,6 +111,15 @@ export default function VotingPage() {
   useEffect(() => {
     if (votingData?.userVote) setSelectedRestaurant(votingData.userVote);
   }, [votingData?.userVote]);
+
+  // Trigger confetti when voting is completed
+  useEffect(() => {
+    if (votingData?.status === 'completed' && votingData?.winningRestaurant && !confettiTriggeredRef.current) {
+      confettiTriggeredRef.current = true;
+      // Small delay to ensure the winner screen is visible
+      setTimeout(() => setShowConfetti(true), 300);
+    }
+  }, [votingData?.status, votingData?.winningRestaurant]);
 
   const visitRecordedRef = useRef(false);
 
@@ -197,6 +209,7 @@ export default function VotingPage() {
     
     return (
       <div className="min-h-screen bg-animated-gradient text-white relative overflow-hidden p-4">
+        <Confetti trigger={showConfetti} type="celebration" />
         <Particles />
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="w-[500px] h-[500px] bg-gradient-to-br from-[#ffd60a]/20 to-transparent rounded-full blur-3xl animate-pulse"></div>

@@ -96,6 +96,53 @@ export default function DashboardPage() {
   const handleSavePreferences = () => updatePrefsMutation.mutate(editedPrefs);
   const toggleArrayItem = (array, item) => array.includes(item) ? array.filter(i => i !== item) : [...array, item];
 
+  // Export analytics data as JSON
+  const exportAnalytics = () => {
+    const cuisineData = profile?.preferences?.cuisine_data || [];
+    const tagData = profile?.preferences?.tag_data || [];
+
+    const exportData = {
+      exportDate: new Date().toISOString(),
+      username: profile?.username || user?.username,
+      summary: {
+        placesVisited: profile?.totalVisits || 0,
+        favorites: (profile?.visits?.filter(v => v.rating >= 4) || []).length,
+        cuisinesTried: cuisineData.length,
+        totalCuisineVisits: cuisineData.reduce((sum, c) => sum + (c.visit_count || 0), 0),
+        tagsTracked: tagData.length,
+      },
+      preferences: profile?.preferences || {},
+      recentVisits: (profile?.visits || []).map(v => ({
+        restaurantName: v.restaurant_name,
+        cuisine: v.restaurant_cuisine,
+        rating: v.rating,
+        wouldReturn: v.would_return,
+        visitedAt: v.visited_at,
+      })),
+      cuisinePreferences: cuisineData.map(c => ({
+        cuisine: c.cuisine,
+        visitCount: c.visit_count,
+        averageRating: Number((c.average_rating || 0).toFixed(2)),
+        wouldReturnCount: c.would_return_count || 0,
+      })),
+      tagPreferences: tagData.map(t => ({
+        tag: t.tag,
+        visitCount: t.visit_count,
+        averageRating: Number((t.average_rating || 0).toFixed(2)),
+      })),
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tastesync-analytics-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   if (!hasHydrated || isLoading) {
     return (
       <div className="min-h-screen bg-animated-gradient flex items-center justify-center">
@@ -117,7 +164,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-animated-gradient text-white relative overflow-hidden">
       <Particles />
-      
+
       {/* Feedback Modal */}
       {feedbackVisit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -131,7 +178,7 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
-      
+
       {/* Header */}
       <header className="relative z-10 border-b border-white/10">
         <div className="max-w-7xl mx-auto px-6 py-4">
@@ -144,13 +191,23 @@ export default function DashboardPage() {
                 <span className="gradient-text">TasteSync</span>
               </h1>
             </div>
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#7209b7] to-[#f72585] flex items-center justify-center text-sm font-bold">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={exportAnalytics}
+                className="group flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#4cc9f0] to-[#7209b7] hover:opacity-90 transition-all font-medium text-sm shadow-lg hover:shadow-[#4cc9f0]/25"
+              >
+                <span className="group-hover:scale-110 transition-transform">📥</span>
+                <span className="hidden sm:inline">Export Analytics</span>
+              </button>
+              <button
+                onClick={() => router.push('/profile')}
+                className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+              >
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#7209b7] to-[#f72585] flex items-center justify-center text-sm font-bold cursor-pointer">
                   {(profile?.username || user?.username || 'U').charAt(0).toUpperCase()}
                 </div>
                 <span className="text-white/80 font-medium hidden sm:block">{profile?.username || user?.username}</span>
-              </div>
+              </button>
               <button
                 onClick={() => { logout(); router.push('/'); }}
                 className="text-white/50 hover:text-white transition-colors text-sm"
@@ -194,7 +251,7 @@ export default function DashboardPage() {
         <section className="relative overflow-hidden rounded-3xl glass-card p-8 md:p-12">
           <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-[#ff6b35]/30 to-transparent rounded-full blur-3xl"></div>
           <div className="absolute bottom-0 left-0 w-48 h-48 bg-gradient-to-tr from-[#f72585]/20 to-transparent rounded-full blur-3xl"></div>
-          
+
           <div className="relative z-10">
             <h2 className="text-3xl md:text-5xl font-bold mb-4">
               Ready to find your <span className="gradient-text">perfect meal</span>?
@@ -202,7 +259,7 @@ export default function DashboardPage() {
             <p className="text-white/60 text-lg mb-8 max-w-xl">
               Swipe, match, and discover the restaurant your whole group will love.
             </p>
-            
+
             <div className="grid sm:grid-cols-2 gap-4 max-w-2xl">
               <button
                 onClick={() => router.push('/lobby/create')}
@@ -215,7 +272,7 @@ export default function DashboardPage() {
                   <p className="text-white/80 text-sm">Start a new group session</p>
                 </div>
               </button>
-              
+
               <button
                 onClick={() => router.push('/lobby/join')}
                 className="group relative overflow-hidden rounded-2xl p-6 bg-gradient-to-r from-[#7209b7] to-[#4cc9f0] hover:scale-[1.02] transition-all duration-300 glow-cyan"
@@ -261,7 +318,7 @@ export default function DashboardPage() {
                 <p className="text-white/50 text-sm">How was your meal? Your feedback helps improve recommendations.</p>
               </div>
             </div>
-            
+
             <div className="space-y-3">
               {pendingFeedback?.visits?.map((visit) => (
                 <FeedbackPrompt
@@ -317,11 +374,10 @@ export default function DashboardPage() {
                     <button
                       key={option.value}
                       onClick={() => setEditedPrefs({ ...editedPrefs, spice_level: option.value })}
-                      className={`px-5 py-3 rounded-xl font-medium transition-all ${
-                        editedPrefs.spice_level === option.value
+                      className={`px-5 py-3 rounded-xl font-medium transition-all ${editedPrefs.spice_level === option.value
                           ? `bg-gradient-to-r ${option.color} text-white scale-105`
                           : 'bg-white/10 text-white/70 hover:bg-white/20'
-                      }`}
+                        }`}
                     >
                       {option.icon} {option.label}
                     </button>
@@ -337,11 +393,10 @@ export default function DashboardPage() {
                     <button
                       key={option.value}
                       onClick={() => setEditedPrefs({ ...editedPrefs, budget: option.value })}
-                      className={`px-5 py-3 rounded-xl font-medium transition-all ${
-                        editedPrefs.budget === option.value
+                      className={`px-5 py-3 rounded-xl font-medium transition-all ${editedPrefs.budget === option.value
                           ? `bg-gradient-to-r ${option.color} text-white scale-105`
                           : 'bg-white/10 text-white/70 hover:bg-white/20'
-                      }`}
+                        }`}
                     >
                       {option.icon} {option.label}
                     </button>
@@ -360,11 +415,10 @@ export default function DashboardPage() {
                         ...editedPrefs,
                         dietary_preferences: toggleArrayItem(editedPrefs.dietary_preferences || [], option)
                       })}
-                      className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                        (editedPrefs.dietary_preferences || []).includes(option)
+                      className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${(editedPrefs.dietary_preferences || []).includes(option)
                           ? 'bg-gradient-to-r from-[#4cc9f0] to-[#7209b7] text-white'
                           : 'bg-white/10 text-white/70 hover:bg-white/20'
-                      }`}
+                        }`}
                     >
                       {option}
                     </button>
@@ -383,11 +437,10 @@ export default function DashboardPage() {
                         ...editedPrefs,
                         allergies: toggleArrayItem(editedPrefs.allergies || [], option)
                       })}
-                      className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                        (editedPrefs.allergies || []).includes(option)
+                      className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${(editedPrefs.allergies || []).includes(option)
                           ? 'bg-gradient-to-r from-red-500 to-pink-600 text-white'
                           : 'bg-white/10 text-white/70 hover:bg-white/20'
-                      }`}
+                        }`}
                     >
                       {option}
                     </button>
@@ -432,7 +485,7 @@ export default function DashboardPage() {
           {(profile?.visits || []).length > 0 ? (
             <div className="grid gap-4">
               {profile.visits.map((visit, idx) => (
-                <div 
+                <div
                   key={visit.id}
                   className="group flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-[#ff6b35]/50 hover:bg-white/10 transition-all cursor-pointer"
                   style={{ animationDelay: `${idx * 100}ms` }}

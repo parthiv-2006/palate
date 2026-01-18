@@ -86,6 +86,62 @@ const visitSchema = new mongoose.Schema({
   },
 }, { _id: true });
 
+// Schema for storing aggregated cuisine statistics from visit history
+const cuisineStatSchema = new mongoose.Schema({
+  cuisine: {
+    type: String,
+    required: true,
+  },
+  visit_count: {
+    type: Number,
+    default: 0,
+  },
+  average_rating: {
+    type: Number,
+    default: 0,
+  },
+  total_rating_sum: {
+    type: Number,
+    default: 0,
+  },
+  average_aspects: {
+    food_quality: { type: Number, default: 0 },
+    service: { type: Number, default: 0 },
+    ambiance: { type: Number, default: 0 },
+    value: { type: Number, default: 0 },
+  },
+  would_return_count: {
+    type: Number,
+    default: 0,
+  },
+  last_visited: {
+    type: Date,
+  },
+}, { _id: false });
+
+// Schema for storing aggregated tag statistics from visit history
+const tagStatSchema = new mongoose.Schema({
+  tag: {
+    type: String,
+    required: true,
+  },
+  visit_count: {
+    type: Number,
+    default: 0,
+  },
+  average_rating: {
+    type: Number,
+    default: 0,
+  },
+  total_rating_sum: {
+    type: Number,
+    default: 0,
+  },
+  last_visited: {
+    type: Date,
+  },
+}, { _id: false });
+
 const userSchema = new mongoose.Schema({
   username: {
     type: String,
@@ -125,6 +181,15 @@ const userSchema = new mongoose.Schema({
     disliked_cuisines: [{
       type: String,
     }],
+    // Aggregated statistics from visit history
+    cuisine_data: {
+      type: [cuisineStatSchema],
+      default: [],
+    },
+    tag_data: {
+      type: [tagStatSchema],
+      default: [],
+    },
   },
   amplitude_behavioral_score: {
     adventurousness: {
