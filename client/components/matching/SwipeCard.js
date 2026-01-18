@@ -1,73 +1,95 @@
 'use client';
 
-import { motion } from 'framer-motion';
-import { useState } from 'react';
+import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
+import { useState, useImperativeHandle, forwardRef } from 'react';
 
-export function SwipeCard({ restaurant, onSwipe, index, isTop }) {
-  const [dragDirection, setDragDirection] = useState(null);
+export const SwipeCard = forwardRef(function SwipeCard({ restaurant, onSwipe, index, isTop }, ref) {
+  const [isExiting, setIsExiting] = useState(false);
+
+  // Motion values for drag
+  const x = useMotionValue(0);
+  const rotate = useTransform(x, [-200, 0, 200], [-15, 0, 15]);
+
+  // Overlay opacity based on drag
+  const likeOpacity = useTransform(x, [0, 100], [0, 1]);
+  const nopeOpacity = useTransform(x, [-100, 0], [1, 0]);
+
+  const triggerSwipe = (direction) => {
+    if (isExiting) return;
+
+    const flyTo = direction === 'right' ? 400 : -400;
+    setIsExiting(true);
+
+    animate(x, flyTo, {
+      type: 'spring',
+      stiffness: 400,
+      damping: 30,
+      onComplete: () => {
+        onSwipe(restaurant.id, direction);
+      }
+    });
+  };
+
+  // Expose triggerSwipe to parent
+  useImperativeHandle(ref, () => ({
+    triggerSwipe
+  }), [isExiting]);
 
   const handleDragEnd = (event, info) => {
-    const swipeThreshold = 100;
-    const velocityThreshold = 500;
+    const swipeThreshold = 80;
+    const velocityThreshold = 300;
 
     if (Math.abs(info.offset.x) > swipeThreshold || Math.abs(info.velocity.x) > velocityThreshold) {
       const direction = info.offset.x > 0 ? 'right' : 'left';
-      onSwipe(restaurant.id, direction);
-    } else {
-      setDragDirection(null);
+      triggerSwipe(direction);
     }
   };
 
-  const handleDrag = (event, info) => {
-    if (Math.abs(info.offset.x) > 50) {
-      setDragDirection(info.offset.x > 0 ? 'right' : 'left');
-    } else {
-      setDragDirection(null);
-    }
+  // Static styles for stacked cards (no animation)
+  const stackStyles = {
+    scale: 1 - index * 0.05,
+    y: index * 12,
+    opacity: 1 - index * 0.2,
   };
-
-  const rotation = dragDirection === 'right' ? 12 : dragDirection === 'left' ? -12 : 0;
 
   return (
     <motion.div
       className="absolute inset-0 rounded-3xl overflow-hidden cursor-grab active:cursor-grabbing"
       style={{
         zIndex: 10 - index,
-        opacity: isTop ? 1 : Math.max(0.3, 0.8 - index * 0.15),
-        transformOrigin: 'center bottom',
+        x: isTop ? x : 0,
+        rotate: isTop ? rotate : 0,
+        scale: isTop ? 1 : stackStyles.scale,
+        y: isTop ? 0 : stackStyles.y,
+        opacity: isTop ? 1 : stackStyles.opacity,
+        transformOrigin: 'center center',
+        pointerEvents: isTop && !isExiting ? 'auto' : 'none',
       }}
-      drag={isTop ? 'x' : false}
+      drag={isTop && !isExiting ? 'x' : false}
       dragConstraints={{ left: 0, right: 0 }}
-      dragElastic={0.15}
-      onDrag={handleDrag}
+      dragElastic={0.7}
       onDragEnd={handleDragEnd}
-      animate={{
-        rotate: rotation,
-        scale: isTop ? 1 : 0.95 - index * 0.03,
-        y: index * 8,
-      }}
-      transition={{
-        type: 'spring',
-        stiffness: 400,
-        damping: 35,
-      }}
+      whileDrag={{ cursor: 'grabbing' }}
     >
       {/* Main Card */}
-      <div className="relative h-full bg-gradient-to-br from-[#1a1a2e] to-[#16213e] border border-white/10 rounded-3xl overflow-hidden">
-        {/* Swipe Overlays */}
-        {dragDirection && (
+      <div className="relative h-full bg-gradient-to-br from-[#1a1a2e] to-[#16213e] border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
+        {/* Like Overlay */}
+        {isTop && (
           <motion.div
-            className={`absolute inset-0 flex items-center justify-center z-20 ${
-              dragDirection === 'right' 
-                ? 'bg-gradient-to-r from-green-500/30 to-transparent' 
-                : 'bg-gradient-to-l from-red-500/30 to-transparent'
-            }`}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            className="absolute inset-0 flex items-center justify-center z-20 bg-gradient-to-r from-green-500/50 to-transparent pointer-events-none"
+            style={{ opacity: likeOpacity }}
           >
-            <div className={`text-8xl ${dragDirection === 'right' ? 'text-green-400' : 'text-red-400'}`}>
-              {dragDirection === 'right' ? '💚' : '❌'}
-            </div>
+            <div className="text-8xl drop-shadow-lg">💚</div>
+          </motion.div>
+        )}
+
+        {/* Nope Overlay */}
+        {isTop && (
+          <motion.div
+            className="absolute inset-0 flex items-center justify-center z-20 bg-gradient-to-l from-red-500/50 to-transparent pointer-events-none"
+            style={{ opacity: nopeOpacity }}
+          >
+            <div className="text-8xl drop-shadow-lg">❌</div>
           </motion.div>
         )}
 
@@ -87,10 +109,10 @@ export function SwipeCard({ restaurant, onSwipe, index, isTop }) {
               <div className="text-7xl opacity-50">🍽️</div>
             </div>
           )}
-          
+
           {/* Gradient overlay */}
           <div className="absolute inset-0 bg-gradient-to-t from-[#1a1a2e] via-transparent to-transparent"></div>
-          
+
           {/* Price Badge */}
           {restaurant.price_range && (
             <div className="absolute top-4 right-4 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white text-sm font-bold">
@@ -148,10 +170,7 @@ export function SwipeCard({ restaurant, onSwipe, index, isTop }) {
             </div>
           )}
         </div>
-
-        {/* Bottom Gradient */}
-        <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[#1a1a2e] to-transparent pointer-events-none"></div>
       </div>
     </motion.div>
   );
-}
+});
