@@ -1,4 +1,4 @@
-# 🍽️ Palate (Stream Shop)
+# 🍽️ Palate
 
 **Palate** is an AI-powered social dining app designed to eliminate the friction of group restaurant decisions. By combining behavioral analytics with generative AI, Palate acts as an impartial mediator that finds the "culinary centroid" of any group.
 
