@@ -5,6 +5,7 @@ const generateLobbyCode = require('../utils/generateCode');
 const AppError = require('../utils/errors');
 const { generateKeywords } = require('../utils/gemini');
 const { fetchRestaurantsFromGeoapify } = require('../utils/geoapify');
+const { enrichWithFoursquare } = require('../utils/foursquare');
 
 /**
  * Create a new lobby
@@ -398,9 +399,12 @@ exports.getRestaurants = async (req, res, next) => {
           console.warn('[Geoapify] No restaurants returned, falling back to local DB');
           restaurants = await Restaurant.find(query).limit(20);
         } else {
-          // 3. Save/Update restaurants in our DB
+          // 3. Enrich with Foursquare (photos, ratings, price tiers)
+          const enrichedRestaurants = await enrichWithFoursquare(geoapifyRestaurants);
+
+          // 4. Save/Update restaurants in our DB
           const savedRestaurants = [];
-          for (const rData of geoapifyRestaurants) {
+          for (const rData of enrichedRestaurants) {
             // Use external_id (Geoapify place_id) to avoid duplicates
             let restaurant = await Restaurant.findOne({ external_id: rData.external_id });
             if (restaurant) {
@@ -412,7 +416,7 @@ exports.getRestaurants = async (req, res, next) => {
             savedRestaurants.push(restaurant);
           }
           restaurants = savedRestaurants;
-          console.log(`Successfully processed ${restaurants.length} restaurants from Geoapify`);
+          console.log(`Successfully processed ${restaurants.length} restaurants from Geoapify + Foursquare`);
         }
       } catch (aiError) {
         console.error('AI fetching failed, falling back to local DB:', aiError);
