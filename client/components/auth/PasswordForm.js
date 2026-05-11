@@ -171,7 +171,7 @@ function PasswordForm({ mode = 'login' }) {
 }
 
 
-const API_BASE = 'http://localhost:3001/api/auth';
+const API_BASE = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth`;
 
 function AuthForm({ mode = 'login' }) {
   const { register2, loginWithToken, isLoading, error } = useAuth();
