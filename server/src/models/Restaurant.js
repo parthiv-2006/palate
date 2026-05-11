@@ -47,7 +47,7 @@ const restaurantSchema = new mongoose.Schema({
   },
   source: {
     type: String,
-    enum: ['google', 'yelp', 'manual'],
+    enum: ['google', 'yelp', 'geoapify', 'manual'],
     default: 'manual',
   },
 }, {
