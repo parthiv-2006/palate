@@ -390,7 +390,7 @@ exports.getRestaurants = async (req, res, next) => {
         
         // 2. Fetch from Yelp
         const yelpRestaurants = await fetchRestaurantsFromYelp(keywords, {
-          location: 'Toronto', // Could be dynamic if we had user location
+          location: process.env.YELP_DEFAULT_LOCATION || 'Toronto',
           limit: 15
         });
 
