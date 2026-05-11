@@ -20,6 +20,14 @@ export const useAuthStore = create(
     {
       name: 'auth-storage',
       storage: createJSONStorage(() => localStorage),
+      // Only persist credentials — never persist transient UI state like error/isLoading
+      partialize: (state) => ({ user: state.user, token: state.token }),
+      // Only pull user+token from stored data; discard any other stale fields (e.g. old error)
+      merge: (persistedState, currentState) => ({
+        ...currentState,
+        user: persistedState?.user ?? null,
+        token: persistedState?.token ?? null,
+      }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
       },

@@ -57,6 +57,8 @@ export function useAuth() {
     router.push('/lobby/create');
   };
 
+  const clearError = () => setError(null);
+
   return {
     user,
     token,
@@ -67,7 +69,8 @@ export function useAuth() {
     login,
     loginWithToken,
     logout,
+    clearError,
     isAuthenticated: !!(user && token),
-    hasHydrated: _hasHydrated, // Expose hydration state
+    hasHydrated: _hasHydrated,
   };
 }
