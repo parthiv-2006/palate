@@ -9,6 +9,13 @@ const {
   verifyAuthenticationResponse
 } = require('@simplewebauthn/server');
 
+/**
+ * In-memory store for pending passkey registration challenges.
+ * Avoids creating ghost User documents before verification succeeds.
+ * Key: username, Value: { challenge, expiresAt }
+ */
+const pendingRegistrationChallenges = new Map();
+
 
 /**
  * Register a new user with password
@@ -155,32 +162,37 @@ exports.login = async (req, res, next) => {
 
 
 /**
- * Step 1: Generate options for browser to start passkey registration
+ * Step 1: Generate options for browser to start passkey registration.
+ * Does NOT create a User document — challenge is stored in memory only.
+ * The User is created in Step 2 after successful verification.
  */
 exports.registerPasskeyOptions = async (req, res) => {
   try {
     const { username } = req.body;
     if (!username || !username.trim()) return res.status(400).json({ error: 'Username required' });
 
-    let user = await User.findOne({ username: username.trim() });
-    if (!user) {
-      user = await User.create({ username: username.trim() });
+    // Reject if a real account already exists (has a password or registered passkey)
+    const existingUser = await User.findOne({ username: username.trim() }).select('+password');
+    if (existingUser && (existingUser.password || existingUser.webauthnCredentials.length > 0)) {
+      return res.status(409).json({ error: 'Username already exists' });
     }
 
     const options = await generateRegistrationOptions({
       rpName: process.env.RP_NAME || 'Palate',
       rpID: process.env.RP_ID || 'localhost',
-      userID: user._id.toString(),
-      userName: user.username,
+      userID: username.trim(), // temporary stand-in; real _id assigned on verify
+      userName: username.trim(),
       authenticatorSelection: {
         residentKey: 'required',
         userVerification: 'required',
       },
     });
 
-    // Save challenge to user document
-    user.challenge = options.challenge;
-    await user.save();
+    // Store challenge in memory — no DB write, no ghost user
+    pendingRegistrationChallenges.set(username.trim(), {
+      challenge: options.challenge,
+      expiresAt: Date.now() + 5 * 60 * 1000, // 5-minute TTL
+    });
 
     res.json(options);
   } catch (err) {
@@ -189,45 +201,58 @@ exports.registerPasskeyOptions = async (req, res) => {
 };
 
 /**
- * Step 2: Verify the passkey registration response from browser
+ * Step 2: Verify the passkey registration response from browser.
+ * Creates the User document only after verification succeeds.
  */
 exports.registerPasskeyVerify = async (req, res) => {
   try {
     const { username, attestationResponse } = req.body;
-    const user = await User.findOne({ username: username.trim() });
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    if (!user.challenge) return res.status(400).json({ error: 'No challenge found for user' });
+
+    // Retrieve challenge from memory (set in Step 1)
+    const pending = pendingRegistrationChallenges.get(username.trim());
+    if (!pending || pending.expiresAt < Date.now()) {
+      pendingRegistrationChallenges.delete(username.trim());
+      return res.status(400).json({ error: 'Challenge expired or not found. Please restart registration.' });
+    }
 
     const verification = await verifyRegistrationResponse({
       response: attestationResponse,
-      expectedChallenge: user.challenge,
+      expectedChallenge: pending.challenge,
       expectedOrigin: process.env.RP_ORIGIN || 'http://localhost:3000',
       expectedRPID: process.env.RP_ID || 'localhost',
     });
+
+    // Always clear the pending challenge after one use
+    pendingRegistrationChallenges.delete(username.trim());
 
     if (!verification.verified) return res.status(400).json({ error: 'Verification failed' });
 
     const { credentialID, credentialPublicKey, counter } = verification.registrationInfo;
 
+    // Race-condition guard: check username is still unclaimed
+    const existingUser = await User.findOne({ username: username.trim() }).select('+password');
+    if (existingUser && (existingUser.password || existingUser.webauthnCredentials.length > 0)) {
+      return res.status(409).json({ error: 'Username was claimed by another account during registration.' });
+    }
+
+    // Reuse ghost user if somehow one still exists, otherwise create fresh
+    const user = existingUser || new User({ username: username.trim() });
     user.webauthnCredentials.push({
-      credentialID: Buffer.from(credentialID), // Convert to Buffer
-      publicKey: Buffer.from(credentialPublicKey), // Convert to Buffer
+      credentialID: Buffer.from(credentialID),
+      publicKey: Buffer.from(credentialPublicKey),
       counter,
       transports: attestationResponse.response.transports || [],
     });
-
-    // Clear challenge
     user.challenge = undefined;
     await user.save();
 
-    // Optional: issue JWT after successful registration
     const token = generateToken({ userId: user._id.toString(), username: user.username });
 
     res.json({
       success: true,
       token,
       userId: user._id.toString(),
-      username: user.username
+      username: user.username,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
