@@ -37,8 +37,24 @@ exports.register = async (req, res, next) => {
     }
 
     // Check if user already exists
-    const existingUser = await User.findOne({ username: username.trim() });
+    const existingUser = await User.findOne({ username: username.trim() }).select('+password');
     if (existingUser) {
+      // Allow claiming a ghost account (created by passkey flow, no password set yet)
+      if (!existingUser.password) {
+        const saltRounds = 10;
+        existingUser.password = await bcrypt.hash(password, saltRounds);
+        await existingUser.save();
+        const token = generateToken({
+          userId: existingUser._id.toString(),
+          username: existingUser.username,
+        });
+        return res.status(201).json({
+          success: true,
+          userId: existingUser._id.toString(),
+          token,
+          username: existingUser.username,
+        });
+      }
       return res.status(409).json({
         error: { message: 'Username already exists' },
       });
