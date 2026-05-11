@@ -4,7 +4,7 @@ const Restaurant = require('../models/Restaurant');
 const generateLobbyCode = require('../utils/generateCode');
 const AppError = require('../utils/errors');
 const { generateKeywords } = require('../utils/gemini');
-const { fetchRestaurantsFromYelp } = require('../utils/yelp');
+const { fetchRestaurantsFromGeoapify } = require('../utils/geoapify');
 
 /**
  * Create a new lobby
@@ -368,7 +368,7 @@ exports.getRestaurants = async (req, res, next) => {
         .map(id => new mongoose.Types.ObjectId(id));
       restaurants = await Restaurant.find({ _id: { $in: storedIds } });
     } else {
-      console.log(`No restaurants found for lobby ${lobbyId}, fetching from AI/Yelp...`);
+      console.log(`No restaurants found for lobby ${lobbyId}, fetching from Gemini + Geoapify...`);
       
       try {
         // Aggregate participants' profiles
@@ -388,33 +388,31 @@ exports.getRestaurants = async (req, res, next) => {
         // 1. Generate keywords with Gemini
         const keywords = await generateKeywords(userProfiles, combinedVibe);
         
-        // 2. Fetch from Yelp
-        const yelpRestaurants = await fetchRestaurantsFromYelp(keywords, {
-          location: process.env.YELP_DEFAULT_LOCATION || 'Toronto',
-          limit: 15
+        // 2. Fetch from Geoapify
+        const geoapifyRestaurants = await fetchRestaurantsFromGeoapify(keywords, {
+          location: process.env.DEFAULT_LOCATION || 'Toronto',
+          limit: 15,
         });
 
-        if (yelpRestaurants.length === 0) {
-          console.warn('Yelp returned no restaurants, falling back to local DB');
+        if (geoapifyRestaurants.length === 0) {
+          console.warn('[Geoapify] No restaurants returned, falling back to local DB');
           restaurants = await Restaurant.find(query).limit(20);
         } else {
           // 3. Save/Update restaurants in our DB
           const savedRestaurants = [];
-          for (const rData of yelpRestaurants) {
-            // Use external_id to avoid duplicates
+          for (const rData of geoapifyRestaurants) {
+            // Use external_id (Geoapify place_id) to avoid duplicates
             let restaurant = await Restaurant.findOne({ external_id: rData.external_id });
             if (restaurant) {
-              // Update existing
               Object.assign(restaurant, rData);
               await restaurant.save();
             } else {
-              // Create new
               restaurant = await Restaurant.create(rData);
             }
             savedRestaurants.push(restaurant);
           }
           restaurants = savedRestaurants;
-          console.log(`Successfully processed ${restaurants.length} restaurants from Yelp`);
+          console.log(`Successfully processed ${restaurants.length} restaurants from Geoapify`);
         }
       } catch (aiError) {
         console.error('AI fetching failed, falling back to local DB:', aiError);
