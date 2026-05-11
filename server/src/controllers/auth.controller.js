@@ -152,8 +152,8 @@ exports.registerPasskeyOptions = async (req, res) => {
     }
 
     const options = await generateRegistrationOptions({
-      rpName: 'Hackathon App',
-      rpID: 'localhost', // or your domain
+      rpName: process.env.RP_NAME || 'Palate',
+      rpID: process.env.RP_ID || 'localhost',
       userID: user._id.toString(),
       userName: user.username,
       authenticatorSelection: {
@@ -186,7 +186,7 @@ exports.registerPasskeyVerify = async (req, res) => {
       response: attestationResponse,
       expectedChallenge: user.challenge,
       expectedOrigin: process.env.RP_ORIGIN || 'http://localhost:3000',
-      expectedRPID: 'localhost',
+      expectedRPID: process.env.RP_ID || 'localhost',
     });
 
     if (!verification.verified) return res.status(400).json({ error: 'Verification failed' });
@@ -277,7 +277,7 @@ exports.loginPasskeyVerify = async (req, res) => {
       response: attestationResponse,
       expectedChallenge: user.challenge,
       expectedOrigin: process.env.RP_ORIGIN || 'http://localhost:3000',
-      expectedRPID: 'localhost',
+      expectedRPID: process.env.RP_ID || 'localhost',
       authenticator: {
         credentialID: credential.credentialID,
         credentialPublicKey: credential.publicKey,
