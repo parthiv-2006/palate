@@ -6,22 +6,24 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 /**
- * Generate search keywords based on group preferences
+ * Generate cuisine-type keywords based on group preferences.
+ * Output is used to query the Geoapify Places API by category.
+ *
  * @param {Array} userProfiles Array of user preference objects and histories
  * @param {Object} vibeCheck Combined vibe check for the current session
- * @returns {Promise<Array<string>>} List of keywords for Yelp search
+ * @returns {Promise<Array<string>>} List of cuisine keywords (e.g. ["indian", "vegan", "thai"])
  */
 async function generateKeywords(userProfiles, vibeCheck) {
   try {
     if (!process.env.GEMINI_API_KEY) {
       console.error('GEMINI_API_KEY is not set');
-      return ['restaurant', 'food']; // Fallback
+      return ['restaurant']; // Fallback
     }
 
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     const prompt = `
-      I have a group of people looking for a place to eat. Based on their combined preferences and histories, generate 5-8 specific search keywords or short phrases that would help find the perfect restaurant on Yelp.
+      I have a group of people looking for a restaurant. Based on their combined preferences and visit history, generate 5-8 cuisine types or food categories that best match the group.
 
       Group Preferences:
       ${userProfiles.map((u, i) => `
@@ -40,13 +42,13 @@ async function generateKeywords(userProfiles, vibeCheck) {
       - Mood: ${vibeCheck?.mood || 'any'}
 
       Instructions:
-      1. Consider dietary restrictions as strict filters.
-      2. Find the "culinary centroid" or interesting intersections (e.g., if one loves spicy and another is vegan, "spicy vegan" or "authentic thai").
-      3. Exclude any disliked cuisines.
-      4. Return ONLY a JSON array of strings. No extra text.
-      5. Keywords should be things you'd type into a Yelp search bar.
+      1. Return ONLY simple, single-word or two-word cuisine/food types (e.g. "indian", "thai", "vegan", "seafood", "pizza").
+      2. If someone is vegan or vegetarian, include "vegan" or "vegetarian" as a keyword — these are treated as dietary filters.
+      3. Exclude any disliked cuisines from the output entirely.
+      4. Find a good culinary match for the whole group (e.g. if preferences overlap on spicy food, include "thai" or "indian").
+      5. Return ONLY a JSON array of strings. No extra text, no explanations.
 
-      Example output: ["authentic mexican", "spicy noodles", "tapas bar", "outdoor seating"]
+      Example output: ["indian", "thai", "vegan", "japanese", "mediterranean"]
     `;
 
     const result = await model.generateContent(prompt);
