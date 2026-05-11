@@ -1,17 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import * as SimpleWebAuthnBrowser from '@simplewebauthn/browser';
 
 
 function PasswordForm({ mode = 'login' }) {
-  const { register1, login, isLoading, error } = useAuth();
+  const { register1, login, isLoading, error, clearError } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [validationError, setValidationError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  // Clear any stale global error when this form mounts or mode changes
+  useEffect(() => {
+    clearError();
+    setValidationError('');
+  }, [mode]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -68,7 +74,7 @@ function PasswordForm({ mode = 'login' }) {
           type="text"
           placeholder="Username"
           value={username}
-          onChange={(e) => setUsername(e.target.value)}
+          onChange={(e) => { setUsername(e.target.value); if (error) clearError(); setValidationError(''); }}
           className="w-full pl-12 pr-4 py-4 bg-white/5 border border-white/10 rounded-2xl text-white placeholder:text-white/30 focus:outline-none focus:border-[#4cc9f0] focus:bg-white/10 transition-all"
           disabled={isLoading}
           autoComplete="username"
@@ -174,9 +180,15 @@ function PasswordForm({ mode = 'login' }) {
 const API_BASE = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth`;
 
 function AuthForm({ mode = 'login' }) {
-  const { register2, loginWithToken, isLoading, error } = useAuth();
+  const { register2, loginWithToken, isLoading, error, clearError } = useAuth();
   const [username, setUsername] = useState('');
   const [validationError, setValidationError] = useState('');
+
+  // Clear any stale global error when this form mounts or mode changes
+  useEffect(() => {
+    clearError();
+    setValidationError('');
+  }, [mode]);
 
   const handleRegister = async () => {
     try {
@@ -281,7 +293,7 @@ function AuthForm({ mode = 'login' }) {
           type="text"
           placeholder="Username"
           value={username}
-          onChange={(e) => setUsername(e.target.value)}
+          onChange={(e) => { setUsername(e.target.value); if (error) clearError(); setValidationError(''); }}
           className="w-full pl-12 pr-4 py-4 bg-white/5 border border-white/10 rounded-2xl text-white placeholder:text-white/30 focus:outline-none focus:border-[#4cc9f0] focus:bg-white/10 transition-all"
           disabled={isLoading}
           autoComplete="username"
@@ -332,6 +344,12 @@ function AuthForm({ mode = 'login' }) {
 
 export function LoginRegisterTabs({ mode = 'login' }) {
   const [method, setMethod] = useState('password');
+  const { clearError } = useAuth();
+
+  const switchMethod = (newMethod) => {
+    setMethod(newMethod);
+    clearError(); // clear stale errors when switching between Password and Passkey
+  };
 
   return (
     <div>
@@ -343,7 +361,7 @@ export function LoginRegisterTabs({ mode = 'login' }) {
               ? 'bg-gradient-to-r from-[#ff6b35] to-[#f72585] text-white shadow-lg'
               : 'text-white/50 hover:text-white'
             }`}
-          onClick={() => setMethod('password')}
+          onClick={() => switchMethod('password')}
         >
           Password
         </button>
@@ -353,7 +371,7 @@ export function LoginRegisterTabs({ mode = 'login' }) {
               ? 'bg-gradient-to-r from-[#4cc9f0] to-[#7209b7] text-white shadow-lg'
               : 'text-white/50 hover:text-white'
             }`}
-          onClick={() => setMethod('passkey')}
+          onClick={() => switchMethod('passkey')}
         >
           Passkey
         </button>
