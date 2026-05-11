@@ -20,11 +20,6 @@ async function generateKeywords(userProfiles, vibeCheck) {
 
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-    console.log('--- GEMINI INPUT DATA ---');
-    console.log('User Profiles:', JSON.stringify(userProfiles, null, 2));
-    console.log('Vibe Check:', JSON.stringify(vibeCheck, null, 2));
-    console.log('-------------------------');
-
     const prompt = `
       I have a group of people looking for a place to eat. Based on their combined preferences and histories, generate 5-8 specific search keywords or short phrases that would help find the perfect restaurant on Yelp.
 
@@ -54,11 +49,6 @@ async function generateKeywords(userProfiles, vibeCheck) {
       Example output: ["authentic mexican", "spicy noodles", "tapas bar", "outdoor seating"]
     `;
 
-    console.log('--- FULL GEMINI PROMPT ---');
-    console.log(prompt);
-    console.log('---------------------------');
-
-    console.log('Prompting Gemini for keywords...');
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const text = response.text();
