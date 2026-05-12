@@ -168,10 +168,17 @@ async function fetchRestaurantsFromFoursquare(keywords, options = {}) {
 
     return restaurants;
   } catch (error) {
-    console.error(
-      '[Foursquare] Error fetching restaurants:',
-      error.response?.data || error.message
-    );
+    const status = error.response?.status;
+    const body = error.response?.data || error.message;
+    if (status === 401 || status === 403) {
+      console.error(
+        `[Foursquare] Auth failed (${status}) — check FOURSQUARE_API_KEY.\n` +
+        `  Keys for v3 Places API must be generated at https://location.foursquare.com/developer\n` +
+        `  and start with "fsq3". Response:`, body
+      );
+    } else {
+      console.error(`[Foursquare] Error (${status ?? 'network'}):`, body);
+    }
     return [];
   }
 }
