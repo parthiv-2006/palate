@@ -1,7 +1,7 @@
 const axios = require('axios');
 const { geocodeCity } = require('./geoapify');
 
-const FSQ_BASE = 'https://api.foursquare.com/v3';
+const FSQ_BASE = 'https://places-api.foursquare.com';
 
 /** Foursquare price tier (1–4) → our price_range string */
 const PRICE_MAP = { 1: '$', 2: '$$', 3: '$$$', 4: '$$$$' };
@@ -101,7 +101,10 @@ async function fetchRestaurantsFromFoursquare(keywords, options = {}) {
 
     // Step 3: single discovery + enrichment call
     const response = await axios.get(`${FSQ_BASE}/places/search`, {
-      headers: { Authorization: apiKey },
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'X-Places-Api-Version': '2025-06-17',
+      },
       params: {
         query,
         ll: `${lat},${lon}`,
@@ -148,7 +151,7 @@ async function fetchRestaurantsFromFoursquare(keywords, options = {}) {
             longitude: placeLon,
           },
           rating,
-          external_id: `fsq_${place.fsq_id}`,
+          external_id: `fsq_${place.fsq_place_id}`,
           source: 'foursquare',
           tags: (place.categories || []).map((c) => c.name),
         };
