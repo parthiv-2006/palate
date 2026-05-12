@@ -372,4 +372,4 @@ async function fetchRestaurantsFromGeoapify(keywords, options = {}) {
   }
 }
 
-module.exports = { fetchRestaurantsFromGeoapify };
+module.exports = { fetchRestaurantsFromGeoapify, geocodeCity };

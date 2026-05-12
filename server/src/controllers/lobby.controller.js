@@ -4,8 +4,7 @@ const Restaurant = require('../models/Restaurant');
 const generateLobbyCode = require('../utils/generateCode');
 const AppError = require('../utils/errors');
 const { generateKeywords } = require('../utils/gemini');
-const { fetchRestaurantsFromGeoapify } = require('../utils/geoapify');
-const { enrichWithFoursquare } = require('../utils/foursquare');
+const { fetchRestaurantsFromFoursquare } = require('../utils/foursquare');
 
 /**
  * Create a new lobby
@@ -369,43 +368,32 @@ exports.getRestaurants = async (req, res, next) => {
         .map(id => new mongoose.Types.ObjectId(id));
       restaurants = await Restaurant.find({ _id: { $in: storedIds } });
     } else {
-      console.log(`No restaurants found for lobby ${lobbyId}, fetching from Gemini + Geoapify...`);
-      
+      console.log(`No restaurants found for lobby ${lobbyId}, fetching from Gemini + Foursquare...`);
+
       try {
-        // Aggregate participants' profiles
-        const userProfiles = lobby.participants
-          .map(p => p.user_id)
-          .filter(Boolean);
-        
-        // Aggregate vibe checks
-        const vibeChecks = lobby.participants
-          .map(p => p.vibeCheck)
-          .filter(Boolean);
-        
-        const combinedVibe = vibeChecks.length > 0 ? vibeChecks[0] : {}; // Simplified: take first or merge
-        
+        // Aggregate participants' profiles and vibe checks
+        const userProfiles = lobby.participants.map(p => p.user_id).filter(Boolean);
+        const vibeChecks = lobby.participants.map(p => p.vibeCheck).filter(Boolean);
+        const combinedVibe = vibeChecks.length > 0 ? vibeChecks[0] : {};
+
         console.log(`Aggregated ${userProfiles.length} user profiles and ${vibeChecks.length} vibe checks for Gemini prompt.`);
-        
-        // 1. Generate keywords with Gemini
+
+        // 1. Generate cuisine keywords with Gemini
         const keywords = await generateKeywords(userProfiles, combinedVibe);
-        
-        // 2. Fetch from Geoapify
-        const geoapifyRestaurants = await fetchRestaurantsFromGeoapify(keywords, {
+
+        // 2. Fetch from Foursquare — discovery + photos + ratings + prices in one call
+        const fsqRestaurants = await fetchRestaurantsFromFoursquare(keywords, {
           location: process.env.DEFAULT_LOCATION || 'Toronto',
           limit: 15,
         });
 
-        if (geoapifyRestaurants.length === 0) {
-          console.warn('[Geoapify] No restaurants returned, falling back to local DB');
+        if (fsqRestaurants.length === 0) {
+          console.warn('[Foursquare] No restaurants returned, falling back to local DB');
           restaurants = await Restaurant.find(query).limit(20);
         } else {
-          // 3. Enrich with Foursquare (photos, ratings, price tiers)
-          const enrichedRestaurants = await enrichWithFoursquare(geoapifyRestaurants);
-
-          // 4. Save/Update restaurants in our DB
+          // 3. Save/Update restaurants — deduped by external_id (fsq_{fsq_id})
           const savedRestaurants = [];
-          for (const rData of enrichedRestaurants) {
-            // Use external_id (Geoapify place_id) to avoid duplicates
+          for (const rData of fsqRestaurants) {
             let restaurant = await Restaurant.findOne({ external_id: rData.external_id });
             if (restaurant) {
               Object.assign(restaurant, rData);
@@ -416,10 +404,10 @@ exports.getRestaurants = async (req, res, next) => {
             savedRestaurants.push(restaurant);
           }
           restaurants = savedRestaurants;
-          console.log(`Successfully processed ${restaurants.length} restaurants from Geoapify + Foursquare`);
+          console.log(`Successfully processed ${restaurants.length} restaurants from Foursquare`);
         }
       } catch (aiError) {
-        console.error('AI fetching failed, falling back to local DB:', aiError);
+        console.error('Fetching failed, falling back to local DB:', aiError);
         restaurants = await Restaurant.find(query).limit(20);
       }
 
