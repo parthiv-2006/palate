@@ -2,7 +2,7 @@
 
 **Palate** is an AI-powered social dining app designed to eliminate the friction of group restaurant decisions. By combining behavioral analytics with generative AI, Palate acts as an impartial mediator that finds the "culinary centroid" of any group.
 
-🌐 **Live Demo:** [mypalate.tech](https://mypalate.tech)
+🌐 **Live Demo:** [palate-self.vercel.app](https://palate-self.vercel.app/)
 
 This project was built for **UofTHacks 2026** and specifically addresses the **Amplitude Technical Challenge** (Self-Improving Products) and the **1Password Challenge** (Passkey/WebAuthn Integration).
 
@@ -56,20 +56,21 @@ Palate implements a complete **Data → Insights → Action** loop to create a p
 ## 🏃 Getting Started
 
 ### Try it Live
-Visit **[mypalate.tech](https://mypalate.tech)** to experience Palate in action!
+Visit **[palate-self.vercel.app](https://palate-self.vercel.app/)** to experience Palate in action!
 
 ### Prerequisites
 -   Node.js (v18+)
 -   MongoDB Atlas account
 -   Google Gemini API Key
--   Yelp Fusion API Key (for restaurant data)
+-   Geoapify API Key (for geocoding)
+-   Foursquare Places API Key (for restaurant data, photos & ratings)
 
 ### Installation
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/aaliyahpirani/stream-shop.git
-   cd stream-shop
+   git clone https://github.com/parthiv-2006/palate.git
+   cd palate
    ```
 
 2. **Setup Backend:**
