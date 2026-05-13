@@ -13,7 +13,7 @@ export function useLobby(lobbyId) {
         throw new Error('Lobby ID is required');
       }
       
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
       const response = await fetch(`${API_URL}/lobby/${lobbyId}`, {
         headers: {
           'Content-Type': 'application/json',

@@ -6,7 +6,7 @@ import { startRegistration, startAuthentication } from '@simplewebauthn/browser'
  * @returns {Promise<{success: boolean, userId: string}>} - Registration response
  */
 export async function registerPasskey(username) {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
   
   // Step 1: Get registration options from backend
   const response = await fetch(`${API_URL}/auth/passkey/register-options`, {
@@ -50,7 +50,7 @@ export async function registerPasskey(username) {
  * @returns {Promise<{success: boolean, token: string, userId: string}>} - Auth result
  */
 export async function authenticatePasskey(username) {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
   
   // Step 1: Get authentication options from backend
   const response = await fetch(`${API_URL}/auth/passkey/auth-options`, {
