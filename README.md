@@ -7,8 +7,6 @@ Group dining app that replaces "where should we eat?" with a structured session:
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green?logo=node.js)](https://nodejs.org/)
 [![Built at UoftHacks 2026](https://img.shields.io/badge/UoftHacks-2026-blueviolet)](https://uofthacks.com/)
 
-> **Hero screenshot needed:** capture the landing/auth page at 1440x900. Save as `.github/assets/landing-desktop.png` and replace this line with `![Palate landing page](.github/assets/landing-desktop.png)`.
-
 ---
 
 ## What It Is
@@ -21,43 +19,11 @@ Built at UoftHacks 2026 by a team of four, addressing the Amplitude Self-Improvi
 
 ---
 
-## Screenshots
+## Demo
 
-### Landing Page
-> **Screenshot needed:** the registration/login page at 1440x900. Save as `.github/assets/landing-desktop.png`.
+[![Palate demo video](https://img.youtube.com/vi/m8ND12sfxTY/maxresdefault.jpg)](https://www.youtube.com/watch?v=m8ND12sfxTY)
 
-### Landing Page (Mobile)
-> **Screenshot needed:** the same page at 390x844. Save as `.github/assets/landing-mobile.png`.
-
-### Onboarding
-> **Screenshot needed:** the first-run preference form where users set spice level, budget, dietary restrictions, allergies, and disliked cuisines. Save as `.github/assets/onboarding.png`.
-
-### Dashboard
-> **Screenshot needed:** the main hub after login showing the create lobby and join lobby options. Save as `.github/assets/dashboard.png`.
-
-### Lobby Waiting Room
-> **Screenshot needed:** the waiting room with participant list, vibe check ready states, and the "Start Matching" button visible to the host. Save as `.github/assets/lobby-waiting.png`.
-
-### Vibe Check
-> **Screenshot needed:** the session vibe check form showing meal type, today's budget, mood, and distance options. Save as `.github/assets/vibe-check.png`.
-
-### Restaurant Swipe Cards
-> **Screenshot needed:** the matching screen with a restaurant card showing photo, name, cuisine type, rating, and price range. Save as `.github/assets/matching-swipe.png`.
-
-### Voting Screen
-> **Screenshot needed:** the blind vote screen with consensus restaurant cards and vote buttons. Save as `.github/assets/voting.png`.
-
-### Results Reveal
-> **Screenshot needed:** the winning restaurant reveal with vote tally. Save as `.github/assets/results.png`.
-
-### Tie-Breaker Revote
-> **Screenshot needed:** the post-tie state where the host initiates a revote narrowed to the tied restaurants. Save as `.github/assets/revote.png`.
-
-### Profile and Visit History
-> **Screenshot needed:** the profile page showing visit history, aggregated cuisine stats, and pending feedback prompts. Save as `.github/assets/profile.png`.
-
-### Post-Meal Feedback
-> **Screenshot needed:** the feedback form with star rating, aspect scores (food quality, service, ambiance, value), categorical tags, dishes tried, and "would return" toggle. Save as `.github/assets/feedback.png`.
+Full walkthrough on [YouTube](https://www.youtube.com/watch?v=m8ND12sfxTY): registration, lobby creation, vibe check, restaurant swiping, voting, and results reveal.
 
 ---
 
